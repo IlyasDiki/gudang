@@ -1,0 +1,13 @@
+body {
+  margin: 0;
+  font-family: "Segoe UI", sans-serif;
+}
+
+.login-wrapper {
+  min-height: 100vh;
+  background: #f5f7fb;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
