@@ -1,4 +1,5 @@
 <<<<<<< HEAD
+<<<<<<< HEAD
 # wms_inv
 PHP/MySQL
 =======
@@ -124,3 +125,7 @@ Image Credits
 
 [Uifaces](http://uifaces.com/)
 >>>>>>> 56e5b80 (repush project)
+=======
+# gudang
+Magang Hub
+>>>>>>> 295ea0d08d468ac09a978e6ea6225ff18721bec5
