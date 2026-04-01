@@ -19,6 +19,7 @@ $q = mysqli_query($conn, "
 SELECT
     kb1.nama_kelompok AS nama_kelompok,
     kb2.nama_kelompok AS parent_barang,
+    kb2.id_kelompok AS parent_id,
     b.nama_barang,
     s.nama_supplier,
     b.satuan,
@@ -92,11 +93,14 @@ LEFT JOIN supplier s
 
 GROUP BY 
     kb1.nama_kelompok,
+    kb2.id_kelompok,
+    kb2.parent_id,
     kb2.nama_kelompok,
     b.id_barang,
     s.id_supplier
 
 ORDER BY 
+  
   CASE 
     WHEN b.nama_barang = 'Powder' THEN 2
     WHEN kb1.nama_kelompok = 'Bahan Baku' THEN 1
@@ -119,8 +123,15 @@ ORDER BY
     WHEN kb2.nama_kelompok = 'Inner Plastik' THEN 3
     WHEN kb2.nama_kelompok = 'Lainnya' THEN 4
     ELSE 99
- END,
+  END,
 
+    CASE 
+    WHEN kb2.nama_kelompok = 'Hasil Bongkar Karantina' THEN 2
+    WHEN kb2.nama_kelompok = 'Hasil Bongkar Oven' THEN 1
+    ELSE 99
+  END,
+
+  kb2.nama_kelompok,
   b.nama_barang
 ");
 
@@ -553,23 +564,23 @@ if($kelompokFix == 'Powder'){
     // =========================
     // HEADER LEVEL 2 (ROMAWI)
     // =========================
-    $parentKey = strtolower(trim($r['parent_barang']));
+    $parentKey = strtolower(trim($kelompokFix . '|' . $r['parent_barang']));
 
-    if(!in_array($parentKey, $parentSudahTampil)){
+if($parentSebelumnya != $r['parent_barang']){
 
-        $urutanSub++;
+    $urutanSub++;
 
-        echo "
-        <tr style='background:#efefef;font-weight:bold'>
-            <td></td>
-            <td colspan='2'>".romawi($urutanSub).". ".$r['parent_barang']."</td>
-            <td colspan='6'></td>
-        </tr>
-        ";
+    echo "
+    <tr style='background:#efefef;font-weight:bold'>
+        <td></td>
+        <td colspan='2'>".romawi($urutanSub).". ".$r['parent_barang']."</td>
+        <td colspan='6'></td>
+    </tr>
+    ";
 
-        $parentSudahTampil[] = $parentKey;
-        $no = 1;
-    }
+    $parentSebelumnya = $r['parent_barang'];
+    $no = 1;
+}
 
     // =========================
     // KHUSUS ARANG → SUPPLIER
