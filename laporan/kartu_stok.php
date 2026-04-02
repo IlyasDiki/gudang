@@ -49,30 +49,26 @@ SELECT
         END
     ),0) AS stok_awal,
 
-    /* =========================
-      MASUK
-    ========================= */
+    /* MASUK */
     IFNULL(SUM(
         CASE 
             WHEN m.tanggal BETWEEN '$tglAwal' AND '$tglAkhir'
             AND m.arah='MASUK'
-            AND (m.jenis IS NULL OR m.jenis != 'AWAL')
+            AND (jm.tipe IS NULL OR jm.tipe != 'STOKAWAL')
             THEN md.jumlah
             ELSE 0
         END
     ),0) AS masuk,
 
-    /* =========================
-       KELUAR
-    ========================= */
-  IFNULL(SUM(
-      CASE 
-          WHEN m.tanggal BETWEEN '$tglAwal' AND '$tglAkhir'
-          AND m.arah='KELUAR'
-          THEN md.jumlah
-          ELSE 0
-      END
-  ),0) AS keluar
+    /* KELUAR */
+    IFNULL(SUM(
+        CASE 
+            WHEN m.tanggal BETWEEN '$tglAwal' AND '$tglAkhir'
+            AND m.arah='KELUAR'
+            THEN md.jumlah
+            ELSE 0
+        END
+    ),0) AS keluar
 
 FROM barang b
 
@@ -87,6 +83,9 @@ LEFT JOIN mutasi_detail md
 
 LEFT JOIN mutasi m
     ON m.id_mutasi = md.id_mutasi
+
+LEFT JOIN jenis_mutasi jm
+    ON jm.id_jenis = m.id_jenis
 
 LEFT JOIN supplier s
     ON s.id_supplier = m.id_supplier
@@ -434,6 +433,7 @@ $judulBulan = ($namaBulan[$bulan] ?? $bulan) . " " . $tahun;
       <th class="angka">Keluar</th>
       <th class="angka">Stok Akhir</th>
       <th>Satuan</th>
+      <th class="angka">Konversi (KG)</th>
       <th>Keterangan</th>
     </tr>
   </thead>
@@ -459,13 +459,14 @@ function romawi($angka){
     return $map[$angka] ?? $angka;
 }
 $powderSudahTampil = false;
-
+    $arangSudahTampil = false;
 // ambil semua data powder sekali saja
 $powderData = [];
 while($row = mysqli_fetch_assoc($qPowder)){
     $powderData[] = $row;
 }
 $parentSudahTampil = [];
+
 while($r = mysqli_fetch_assoc($q)){
 
     $stokAkhir = $r['stok_awal'] + $r['masuk'] - $r['keluar'];
@@ -495,7 +496,7 @@ if(
 
         echo "
         <tr style='background:#dcdcdc;font-weight:bold'>
-            <td colspan='9'>".$kelompokMap[$kelompokFix].". ".$kelompokFix."</td>
+            <td colspan='10'>".$kelompokMap[$kelompokFix].". ".$kelompokFix."</td>
         </tr>
         ";
 
@@ -527,6 +528,7 @@ if($kelompokFix == 'Powder'){
                 <td class='angka'>".number_format($p['keluar'],0)."</td>
                 <td class='angka'>".number_format($stokAkhir,2)."</td>
                 <td>Kg</td>
+                <td class='angka'></td>
                 <td></td>
             </tr>
             ";
@@ -551,6 +553,7 @@ if($kelompokFix == 'Powder'){
             <td class='angka'>".number_format($keluarRepro,0)."</td>
             <td class='angka'>".number_format($akhirRepro,2)."</td>
             <td>Kg</td>
+            <td class='angka'></td>
             <td></td>
         </tr>
         ";
@@ -574,7 +577,7 @@ if($parentSebelumnya != $r['parent_barang']){
     <tr style='background:#efefef;font-weight:bold'>
         <td></td>
         <td colspan='2'>".romawi($urutanSub).". ".$r['parent_barang']."</td>
-        <td colspan='6'></td>
+        <td colspan='7'></td>
     </tr>
     ";
 
@@ -585,31 +588,68 @@ if($parentSebelumnya != $r['parent_barang']){
     // =========================
     // KHUSUS ARANG → SUPPLIER
     // =========================
-    if(strtolower(trim($r['parent_barang'])) == 'arang tempurung kelapa'){
+if(strtolower(trim($r['parent_barang'])) == 'arang tempurung kelapa'){
+    if($arangSudahTampil){
+        continue;
+    }
+
+    // 🔥 reset pointer (WAJIB)
+    mysqli_data_seek($qArang, 0);
+
     $no = 1;
+
+    $totalStokAwal = 0;
+    $totalMasuk    = 0;
+    $totalKeluar   = 0;
+    $totalAkhir    = 0;
+
     while($ar = mysqli_fetch_assoc($qArang)){
 
         $stokAkhir = $ar['stok_awal'] + $ar['masuk'] - $ar['keluar'];
+
+        // akumulasi total
+        $totalStokAwal += $ar['stok_awal'];
+        $totalMasuk    += $ar['masuk'];
+        $totalKeluar   += $ar['keluar'];
+        $totalAkhir    += $stokAkhir;
 
         echo "
         <tr>
             <td></td>
             <td></td>
-            <td>".$no.". ".$ar['nama_supplier'] . ' - ' . $ar['alamat']."</td>
+            <td>".$no.". ".$ar['nama_supplier']." - ".$ar['alamat']."</td>
             <td class='angka'>".number_format($ar['stok_awal'],2)."</td>
             <td class='angka'>".number_format($ar['masuk'],0)."</td>
             <td class='angka'>".number_format($ar['keluar'],0)."</td>
             <td class='angka'>".number_format($stokAkhir,2)."</td>
             <td>Kg</td>
             <td></td>
+            <td></td>
         </tr>
         ";
 
+        $arangSudahTampil = true;
+        
         $no++;
     }
 
-    continue;
+    // 🔥 TOTAL (SEKALI SAJA & SUDAH BENAR)
+    echo "
+    <tr style='background:#fff3cd;font-weight:bold'>
+        <td></td>
+        <td></td>
+        <td>JUMLAH ARANG TEMPURUNG</td>
+        <td class='angka'>".number_format($totalStokAwal,2)."</td>
+        <td class='angka'>".number_format($totalMasuk,0)."</td>
+        <td class='angka'>".number_format($totalKeluar,0)."</td>
+        <td class='angka'>".number_format($totalAkhir,2)."</td>
+        <td>Kg</td>
+        <td></td>
+        <td></td>
+    </tr>
+    ";
 
+    continue;
     }else{
 
         // =========================
@@ -625,6 +665,7 @@ if($parentSebelumnya != $r['parent_barang']){
             <td class='angka'>".number_format($r['keluar'],0)."</td>
             <td class='angka'>".number_format($stokAkhir,2)."</td>
             <td>".$r['satuan']."</td>
+            <td class='angka'></td>
             <td></td>
         </tr>
         ";

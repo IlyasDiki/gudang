@@ -1,6 +1,6 @@
 <?php
 require '../config/init.php';
-
+header('Content-Type: application/json');
 mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
 
 $idtransaksi = $_POST['id_transaksi'] ?? null;
@@ -120,8 +120,18 @@ try {
 
   mysqli_commit($conn);
 
-  header("Location: transaksi.php");
-  exit;
+  if (mysqli_commit($conn)) {
+      echo json_encode([
+          "status" => "success",
+          "message" => "Data berhasil ditambahkan"
+      ]);
+  } else {
+      echo json_encode([
+          "status" => "error",
+          "message" => "Gagal menyimpan data"
+      ]);
+  }
+exit;
 
 } catch (Exception $e) {
 
