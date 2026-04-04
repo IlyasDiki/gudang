@@ -19,26 +19,24 @@ $q = mysqli_query($conn, "
 SELECT
     kb1.nama_kelompok AS nama_kelompok,
     kb2.nama_kelompok AS parent_barang,
-    kb2.id_kelompok AS parent_id,
     b.nama_barang,
-    s.nama_supplier,
     b.satuan,
 
     /* =========================
-      STOK AWAL
+       STOK AWAL
     ========================= */
     IFNULL(SUM(
         CASE 
 
-            /* STOK AWAL BULAN INI SAJA */
-            WHEN m.jenis = 'AWAL'
+            /* STOK AWAL BULAN INI */
+            WHEN jm.tipe = 'STOKAWAL'
             AND DATE_FORMAT(m.tanggal,'%Y-%m') = '$tahun-$bulan'
                 THEN md.jumlah
 
-            /* SALDO SEBELUM BULAN INI */
+            /* SALDO SEBELUM BULAN */
             WHEN m.tanggal < '$tglAwal' 
             AND m.arah='MASUK'
-            AND (m.jenis IS NULL OR m.jenis != 'AWAL')
+            AND (jm.tipe IS NULL OR jm.tipe != 'STOKAWAL')
                 THEN md.jumlah
 
             WHEN m.tanggal < '$tglAwal' 
@@ -49,7 +47,9 @@ SELECT
         END
     ),0) AS stok_awal,
 
-    /* MASUK */
+    /* =========================
+       MASUK
+    ========================= */
     IFNULL(SUM(
         CASE 
             WHEN m.tanggal BETWEEN '$tglAwal' AND '$tglAkhir'
@@ -60,7 +60,9 @@ SELECT
         END
     ),0) AS masuk,
 
-    /* KELUAR */
+    /* =========================
+       KELUAR
+    ========================= */
     IFNULL(SUM(
         CASE 
             WHEN m.tanggal BETWEEN '$tglAwal' AND '$tglAkhir'
@@ -83,20 +85,16 @@ LEFT JOIN mutasi_detail md
 
 LEFT JOIN mutasi m
     ON m.id_mutasi = md.id_mutasi
+    AND YEAR(m.tanggal) = '$tahun'
 
 LEFT JOIN jenis_mutasi jm
     ON jm.id_jenis = m.id_jenis
 
-LEFT JOIN supplier s
-    ON s.id_supplier = m.id_supplier
-
 GROUP BY 
     kb1.nama_kelompok,
     kb2.id_kelompok,
-    kb2.parent_id,
     kb2.nama_kelompok,
-    b.id_barang,
-    s.id_supplier
+    b.id_barang
 
 ORDER BY 
   
@@ -117,9 +115,9 @@ ORDER BY
   END,
 
   CASE 
-    WHEN kb2.nama_kelompok = 'Inner Box Bahan Baku Pendukung' THEN 1
-    WHEN kb2.nama_kelompok = 'Master Box' THEN 2
-    WHEN kb2.nama_kelompok = 'Inner Plastik' THEN 3
+    WHEN kb2.nama_kelompok = 'Inner Box Bahan Baku Pendukung' THEN 2
+    WHEN kb2.nama_kelompok = 'Master Box' THEN 3
+    WHEN kb2.nama_kelompok = 'Inner Plastik' THEN 1
     WHEN kb2.nama_kelompok = 'Lainnya' THEN 4
     ELSE 99
   END,
@@ -130,8 +128,9 @@ ORDER BY
     ELSE 99
   END,
 
-  kb2.nama_kelompok,
-  b.nama_barang
+    kb1.nama_kelompok,
+    kb2.nama_kelompok,
+    b.nama_barang
 ");
 
 $qArang = mysqli_query($conn, "
@@ -222,26 +221,36 @@ SELECT
   s.alamat,
 
   /* =========================
-     STOK AWAL (DARI MUTASI)
+     STOK AWAL (MUTASI)
   ========================= */
   IFNULL(sa.stok_awal,0) AS stok_awal,
 
   /* =========================
-     MASUK (ATP)
+     MASUK TOTAL
+     = MUTASI + ATP
   ========================= */
-  IFNULL(atp.masuk,0) AS masuk,
+  (
+    IFNULL(ms.masuk,0)
+    + IFNULL(atp.masuk,0)
+  ) AS masuk,
 
   /* =========================
-     KELUAR (MIXER)
+     KELUAR TOTAL
+     = MUTASI + MIXER
   ========================= */
-  IFNULL(mx.keluar,0) AS keluar,
+  (
+    IFNULL(kl.keluar,0)
+    + IFNULL(mx.keluar,0)
+  ) AS keluar,
 
   /* =========================
      SALDO
   ========================= */
   (
     IFNULL(sa.stok_awal,0)
+    + IFNULL(ms.masuk,0)
     + IFNULL(atp.masuk,0)
+    - IFNULL(kl.keluar,0)
     - IFNULL(mx.keluar,0)
   ) AS saldo
 
@@ -255,14 +264,48 @@ LEFT JOIN (
     md.id_supplier,
     SUM(md.jumlah) AS stok_awal
   FROM mutasi m
-  JOIN mutasi_detail md 
-    ON md.id_mutasi = m.id_mutasi
+  JOIN mutasi_detail md ON md.id_mutasi = m.id_mutasi
   JOIN barang b ON b.id_barang = md.id_barang
-  WHERE m.jenis = 'AWAL'
+  LEFT JOIN jenis_mutasi jm ON jm.id_jenis = m.id_jenis
+  WHERE (jm.tipe = 'STOKAWAL' OR m.jenis = 'AWAL')
     AND b.nama_barang IN ('Powder','Repro Briket')
     AND DATE_FORMAT(m.tanggal,'%Y-%m') = '$tahun-$bulan'
   GROUP BY md.id_supplier
 ) sa ON sa.id_supplier = s.id_supplier
+
+/* =========================
+   MASUK (MUTASI)
+========================= */
+LEFT JOIN (
+  SELECT 
+    md.id_supplier,
+    SUM(md.jumlah) AS masuk
+  FROM mutasi m
+  JOIN mutasi_detail md ON md.id_mutasi = m.id_mutasi
+  JOIN barang b ON b.id_barang = md.id_barang
+  LEFT JOIN jenis_mutasi jm ON jm.id_jenis = m.id_jenis
+  WHERE m.arah = 'MASUK'
+    AND (jm.tipe IS NULL OR jm.tipe != 'STOKAWAL')
+    AND b.nama_barang IN ('Powder','Repro Briket')
+    AND m.tanggal BETWEEN '$tglAwal' AND '$tglAkhir'
+  GROUP BY md.id_supplier
+) ms ON ms.id_supplier = s.id_supplier
+
+/* =========================
+   KELUAR (MUTASI)
+========================= */
+LEFT JOIN (
+  SELECT 
+    md.id_supplier,
+    SUM(md.jumlah) AS keluar
+  FROM mutasi m
+  JOIN mutasi_detail md ON md.id_mutasi = m.id_mutasi
+  JOIN barang b ON b.id_barang = md.id_barang
+  WHERE m.arah = 'KELUAR'
+    AND b.nama_barang IN ('Powder','Repro Briket')
+    AND m.tanggal BETWEEN '$tglAwal' AND '$tglAkhir'
+  GROUP BY md.id_supplier
+) kl ON kl.id_supplier = s.id_supplier
 
 /* =========================
    MASUK (ATP)
@@ -284,8 +327,7 @@ LEFT JOIN (
     p.id_supplier,
     SUM(pd.mixer) AS keluar
   FROM produksi p
-  JOIN produksi_detail pd 
-    ON pd.id_produksi = p.id_produksi
+  JOIN produksi_detail pd ON pd.id_produksi = p.id_produksi
   WHERE p.tanggal BETWEEN '$tglAwal' AND '$tglAkhir'
   GROUP BY p.id_supplier
 ) mx ON mx.id_supplier = s.id_supplier
@@ -629,7 +671,7 @@ if(strtolower(trim($r['parent_barang'])) == 'arang tempurung kelapa'){
         ";
 
         $arangSudahTampil = true;
-        
+
         $no++;
     }
 

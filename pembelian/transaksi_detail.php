@@ -252,20 +252,6 @@ document.getElementById('barang').addEventListener('change', function() {
 </script>
 
 <script>
-    document.getElementById('barang').addEventListener('change', function() {
-        let supplierBox = document.getElementById('supplierBox');
-        let selected = this.options[this.selectedIndex];
-        let pakaiSupplier = selected.getAttribute("data-supplier");
-        if (pakaiSupplier == "1") {
-            supplierBox.style.display = "block";
-        } else {
-
-            supplierBox.style.display = "none";
-        }
-    });
-</script>
-
-<script>
 document.getElementById("formDetail").addEventListener("submit", function(e) {
     e.preventDefault(); // ⛔ stop reload
 
