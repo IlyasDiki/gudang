@@ -1,130 +1,685 @@
 <?php
 require '../config/init.php';
 
+// ================================
+// FILTER
+// ================================
 $bulan = $_GET['bulan'] ?? date('m');
 $tahun = $_GET['tahun'] ?? date('Y');
+
 $bulan = str_pad($bulan, 2, "0", STR_PAD_LEFT);
 
 $tglAwal  = "$tahun-$bulan-01";
 $tglAkhir = date("Y-m-t", strtotime($tglAwal));
 
+// ================================
+// HEADER EXCEL
+// ================================
+//header("Content-Type: application/vnd.ms-excel");
+//header("Content-Disposition: attachment; filename=Kartu_Stok_$bulan-$tahun.xls");
+
+echo "\xEF\xBB\xBF";
+
+// ================================
+// NAMA BULAN
+// ================================
 $namaBulan = [
   "01"=>"Januari","02"=>"Februari","03"=>"Maret","04"=>"April",
   "05"=>"Mei","06"=>"Juni","07"=>"Juli","08"=>"Agustus",
   "09"=>"September","10"=>"Oktober","11"=>"November","12"=>"Desember"
 ];
+
 $judulBulan = ($namaBulan[$bulan] ?? $bulan) . " " . $tahun;
 
-// ================================
-// QUERY LAPORAN
-// ================================
 $q = mysqli_query($conn, "
-  SELECT 
-    kb.nama_kelompok,
+SELECT
+    kb1.nama_kelompok AS nama_kelompok,
+    kb2.nama_kelompok AS parent_barang,
     b.nama_barang,
     b.satuan,
 
+    /* =========================
+       STOK AWAL
+    ========================= */
     IFNULL(SUM(
-      CASE 
-        WHEN m.tanggal < '$tglAwal' AND m.arah = 'MASUK' THEN md.jumlah
-        WHEN m.tanggal < '$tglAwal' AND m.arah = 'KELUAR' THEN -md.jumlah
-        ELSE 0
-      END
+        CASE 
+
+            /* STOK AWAL BULAN INI */
+            WHEN jm.tipe = 'STOKAWAL'
+            AND DATE_FORMAT(m.tanggal,'%Y-%m') = '$tahun-$bulan'
+                THEN md.jumlah
+
+            /* SALDO SEBELUM BULAN */
+            WHEN m.tanggal < '$tglAwal' 
+            AND m.arah='MASUK'
+            AND (jm.tipe IS NULL OR jm.tipe != 'STOKAWAL')
+                THEN md.jumlah
+
+            WHEN m.tanggal < '$tglAwal' 
+            AND m.arah='KELUAR'
+                THEN -md.jumlah
+
+            ELSE 0
+        END
     ),0) AS stok_awal,
 
+    /* =========================
+       MASUK
+    ========================= */
     IFNULL(SUM(
-      CASE 
-        WHEN m.tanggal BETWEEN '$tglAwal' AND '$tglAkhir'
-         AND m.arah = 'MASUK'
-        THEN md.jumlah
-        ELSE 0
-      END
+        CASE 
+            WHEN m.tanggal BETWEEN '$tglAwal' AND '$tglAkhir'
+            AND m.arah='MASUK'
+            AND (jm.tipe IS NULL OR jm.tipe != 'STOKAWAL')
+            THEN md.jumlah
+            ELSE 0
+        END
     ),0) AS masuk,
 
+    /* =========================
+       KELUAR
+    ========================= */
     IFNULL(SUM(
-      CASE 
-        WHEN m.tanggal BETWEEN '$tglAwal' AND '$tglAkhir'
-         AND m.arah = 'KELUAR'
-        THEN md.jumlah
-        ELSE 0
-      END
+        CASE 
+            WHEN m.tanggal BETWEEN '$tglAwal' AND '$tglAkhir'
+            AND m.arah='KELUAR'
+            THEN md.jumlah
+            ELSE 0
+        END
     ),0) AS keluar
 
-  FROM barang b
-  JOIN kelompok_barang kb ON kb.id_kelompok = b.id_kelompok
-  LEFT JOIN mutasi_detail md ON md.id_barang = b.id_barang
-  LEFT JOIN mutasi m ON m.id_mutasi = md.id_mutasi
+FROM barang b
 
-  GROUP BY b.id_barang
-  ORDER BY kb.nama_kelompok ASC, b.nama_barang ASC
+LEFT JOIN kelompok_barang kb2
+    ON kb2.id_kelompok = b.id_kelompok
+
+LEFT JOIN kelompok_barang kb1
+    ON kb1.id_kelompok = kb2.parent_id
+
+LEFT JOIN mutasi_detail md
+    ON md.id_barang = b.id_barang
+
+LEFT JOIN mutasi m
+    ON m.id_mutasi = md.id_mutasi
+
+LEFT JOIN jenis_mutasi jm
+    ON jm.id_jenis = m.id_jenis
+
+GROUP BY 
+    kb1.nama_kelompok,
+    kb2.id_kelompok,
+    kb2.nama_kelompok,
+    b.id_barang
+
+ORDER BY 
+
+-- 🔥 URUTAN KELOMPOK UTAMA (INI JANGAN DIUBAH)
+CASE 
+  WHEN b.nama_barang = 'Powder' THEN 2
+  WHEN kb1.nama_kelompok = 'Bahan Baku' THEN 1
+  WHEN kb1.nama_kelompok = 'Bahan Baku Pendukung' THEN 3
+  WHEN kb1.nama_kelompok = 'Work In Progress' THEN 4
+  WHEN kb1.nama_kelompok = 'Barang Jadi' THEN 5
+  ELSE 99
+END,
+
+-- 🔥 SUB KELOMPOK LEVEL 1
+CASE 
+  WHEN kb2.nama_kelompok = 'Arang Tempurung Kelapa' THEN 1
+  WHEN kb2.nama_kelompok = 'AFKIR' THEN 2
+  WHEN kb2.nama_kelompok = 'Bahan Pendamping & Energi' THEN 3
+  ELSE 99
+END,
+
+-- 🔥 KHUSUS BAHAN PENDUKUNG (biar tidak bentrok)
+CASE 
+  WHEN kb1.nama_kelompok = 'Bahan Baku Pendukung' THEN
+    CASE 
+      WHEN kb2.nama_kelompok = 'Inner Plastik' THEN 1
+      WHEN kb2.nama_kelompok = 'Inner Box Bahan Baku Pendukung' THEN 2
+      WHEN kb2.nama_kelompok = 'Master Box' THEN 3
+      WHEN kb2.nama_kelompok = 'Lainnya' THEN 4
+      ELSE 99
+    END
+  ELSE 0
+END,
+
+-- 🔥 KHUSUS WIP (INI KUNCI MASALAH KAMU)
+CASE 
+  WHEN kb1.nama_kelompok = 'Work In Progress' THEN
+    CASE 
+      WHEN kb2.nama_kelompok = 'Hasil Bongkar Oven' THEN 1
+      WHEN kb2.nama_kelompok = 'Hasil Bongkar Karantina' THEN 2
+      ELSE 99
+    END
+  ELSE 0
+END,
+
+-- 🔥 KHUSUS BARANG JADI
+CASE 
+  WHEN kb1.nama_kelompok = 'Barang Jadi' THEN
+    CASE 
+      WHEN kb2.nama_kelompok = 'Inner Plastik/Pack' THEN 1
+      WHEN kb2.nama_kelompok = 'Master Box Barang Jadi' THEN 2
+      WHEN kb2.nama_kelompok = 'Reject Packing' THEN 3
+      WHEN kb2.nama_kelompok = 'Briket Riset' THEN 4
+      ELSE 99
+    END
+  ELSE 0
+END,
+
+-- 🔥 TERAKHIR BARU NAMA BARANG
+b.nama_barang
+");
+
+if(!$q){
+    die("QUERY ERROR: " . mysqli_error($conn));
+}
+
+$qArang = mysqli_query($conn, "
+SELECT 
+  s.id_supplier,
+  s.nama_supplier,
+  s.alamat,
+
+  /* STOK AWAL */
+  IFNULL(sa.stok_awal,0) AS stok_awal,
+
+  /* MASUK */
+  IFNULL(ms.masuk,0) AS masuk,
+
+  /* KELUAR */
+  IFNULL(kl.keluar,0) AS keluar,
+
+  (
+    IFNULL(sa.stok_awal,0)
+    + IFNULL(ms.masuk,0)
+    - IFNULL(kl.keluar,0)
+  ) AS saldo
+
+FROM supplier s
+
+/* =========================
+   STOK AWAL
+========================= */
+LEFT JOIN (
+  SELECT 
+    md.id_supplier,
+    SUM(md.jumlah) AS stok_awal
+  FROM mutasi m
+  JOIN mutasi_detail md 
+    ON md.id_mutasi = m.id_mutasi
+  JOIN barang b ON b.id_barang = md.id_barang
+  JOIN kelompok_barang kb2 ON kb2.id_kelompok = b.id_kelompok
+  WHERE m.jenis = 'AWAL'
+    AND kb2.nama_kelompok = 'Arang Tempurung Kelapa'
+    AND DATE_FORMAT(m.tanggal,'%Y-%m') = '$tahun-$bulan'
+  GROUP BY md.id_supplier
+) sa ON sa.id_supplier = s.id_supplier
+
+/* =========================
+   MASUK
+========================= */
+LEFT JOIN (
+  SELECT 
+    md.id_supplier,
+    SUM(md.jumlah) AS masuk
+  FROM mutasi m
+  JOIN mutasi_detail md 
+    ON md.id_mutasi = m.id_mutasi
+  JOIN barang b ON b.id_barang = md.id_barang
+  JOIN kelompok_barang kb2 ON kb2.id_kelompok = b.id_kelompok
+  WHERE m.arah = 'MASUK'
+    AND m.jenis != 'AWAL'
+    AND kb2.nama_kelompok = 'Arang Tempurung Kelapa'
+    AND m.tanggal BETWEEN '$tglAwal' AND '$tglAkhir'
+  GROUP BY md.id_supplier
+) ms ON ms.id_supplier = s.id_supplier
+
+/* =========================
+   KELUAR
+========================= */
+LEFT JOIN (
+  SELECT 
+    md.id_supplier,
+    SUM(md.jumlah) AS keluar
+  FROM mutasi m
+  JOIN mutasi_detail md 
+    ON md.id_mutasi = m.id_mutasi
+  JOIN barang b ON b.id_barang = md.id_barang
+  JOIN kelompok_barang kb2 ON kb2.id_kelompok = b.id_kelompok
+  WHERE m.arah = 'KELUAR'
+    AND kb2.nama_kelompok = 'Arang Tempurung Kelapa'
+    AND m.tanggal BETWEEN '$tglAwal' AND '$tglAkhir'
+  GROUP BY md.id_supplier
+) kl ON kl.id_supplier = s.id_supplier
+
+ORDER BY s.id_supplier
+");
+
+$qPowder = mysqli_query($conn, "
+SELECT 
+  s.id_supplier,
+  s.nama_supplier,
+  s.alamat,
+
+  /* =========================
+     STOK AWAL (MUTASI)
+  ========================= */
+  IFNULL(sa.stok_awal,0) AS stok_awal,
+
+  /* =========================
+     MASUK TOTAL
+     = MUTASI + ATP
+  ========================= */
+  (
+    IFNULL(ms.masuk,0)
+    + IFNULL(atp.masuk,0)
+  ) AS masuk,
+
+  /* =========================
+     KELUAR TOTAL
+     = MUTASI + MIXER
+  ========================= */
+  (
+    IFNULL(kl.keluar,0)
+    + IFNULL(mx.keluar,0)
+  ) AS keluar,
+
+  /* =========================
+     SALDO
+  ========================= */
+  (
+    IFNULL(sa.stok_awal,0)
+    + IFNULL(ms.masuk,0)
+    + IFNULL(atp.masuk,0)
+    - IFNULL(kl.keluar,0)
+    - IFNULL(mx.keluar,0)
+  ) AS saldo
+
+FROM supplier s
+
+/* =========================
+   STOK AWAL (MUTASI)
+========================= */
+LEFT JOIN (
+  SELECT 
+    md.id_supplier,
+    SUM(md.jumlah) AS stok_awal
+  FROM mutasi m
+  JOIN mutasi_detail md ON md.id_mutasi = m.id_mutasi
+  JOIN barang b ON b.id_barang = md.id_barang
+  LEFT JOIN jenis_mutasi jm ON jm.id_jenis = m.id_jenis
+  WHERE (jm.tipe = 'STOKAWAL' OR m.jenis = 'AWAL')
+    AND b.nama_barang IN ('Powder','Repro Briket')
+    AND DATE_FORMAT(m.tanggal,'%Y-%m') = '$tahun-$bulan'
+  GROUP BY md.id_supplier
+) sa ON sa.id_supplier = s.id_supplier
+
+/* =========================
+   MASUK (MUTASI)
+========================= */
+LEFT JOIN (
+  SELECT 
+    md.id_supplier,
+    SUM(md.jumlah) AS masuk
+  FROM mutasi m
+  JOIN mutasi_detail md ON md.id_mutasi = m.id_mutasi
+  JOIN barang b ON b.id_barang = md.id_barang
+  LEFT JOIN jenis_mutasi jm ON jm.id_jenis = m.id_jenis
+  WHERE m.arah = 'MASUK'
+    AND (jm.tipe IS NULL OR jm.tipe != 'STOKAWAL')
+    AND b.nama_barang IN ('Powder','Repro Briket')
+    AND m.tanggal BETWEEN '$tglAwal' AND '$tglAkhir'
+  GROUP BY md.id_supplier
+) ms ON ms.id_supplier = s.id_supplier
+
+/* =========================
+   KELUAR (MUTASI)
+========================= */
+LEFT JOIN (
+  SELECT 
+    md.id_supplier,
+    SUM(md.jumlah) AS keluar
+  FROM mutasi m
+  JOIN mutasi_detail md ON md.id_mutasi = m.id_mutasi
+  JOIN barang b ON b.id_barang = md.id_barang
+  WHERE m.arah = 'KELUAR'
+    AND b.nama_barang IN ('Powder','Repro Briket')
+    AND m.tanggal BETWEEN '$tglAwal' AND '$tglAkhir'
+  GROUP BY md.id_supplier
+) kl ON kl.id_supplier = s.id_supplier
+
+/* =========================
+   MASUK (ATP)
+========================= */
+LEFT JOIN (
+  SELECT 
+    a.id_supplier,
+    SUM(a.atp) AS masuk
+  FROM at_detail a
+  WHERE a.tanggal BETWEEN '$tglAwal' AND '$tglAkhir'
+  GROUP BY a.id_supplier
+) atp ON atp.id_supplier = s.id_supplier
+
+/* =========================
+   KELUAR (MIXER)
+========================= */
+LEFT JOIN (
+  SELECT 
+    p.id_supplier,
+    SUM(pd.mixer) AS keluar
+  FROM produksi p
+  JOIN produksi_detail pd ON pd.id_produksi = p.id_produksi
+  WHERE p.tanggal BETWEEN '$tglAwal' AND '$tglAkhir'
+  GROUP BY p.id_supplier
+) mx ON mx.id_supplier = s.id_supplier
+
+ORDER BY s.id_supplier
+");
+
+$qRepro = mysqli_query($conn, "
+SELECT 
+  SUM(md.jumlah) AS stok_awal
+FROM mutasi m
+JOIN mutasi_detail md ON md.id_mutasi = m.id_mutasi
+JOIN barang b ON b.id_barang = md.id_barang
+WHERE m.jenis='AWAL'
+AND b.nama_barang='Repro Briket'
+AND DATE_FORMAT(m.tanggal,'%Y-%m') = '$tahun-$bulan'
 ");
 
 // ================================
-// HEADER EXCEL
+// HELPER
 // ================================
-$filename = "Kartu_Stok_$bulan-$tahun.xls";
+function romawi($angka){
+    $map=[1=>"I",2=>"II",3=>"III",4=>"IV",5=>"V"];
+    return $map[$angka] ?? $angka;
+}
 
-header("Content-Type: application/vnd.ms-excel; charset=utf-8");
-header("Content-Disposition: attachment; filename=$filename");
-header("Pragma: no-cache");
-header("Expires: 0");
+$kelompokMap = [
+  'Bahan Baku'=>'A',
+  'Powder'=>'B',
+  'Bahan Baku Pendukung'=>'C',
+  'Work In Progress'=>'D',
+  'Barang Jadi'=>'E'
+];
 
-echo "\xEF\xBB\xBF"; // biar utf-8 aman di excel
+// ================================
+// INIT
+// ================================
+$urutanKelompok = '';
+$parentSebelumnya = '';
+$urutanSub = 0;
+$no = 1;
+
+$powderSudah = false;
+$arangSudah = false;
+
+// total WIP
+$totalAwalWIP=0;
+$totalMasukWIP=0;
+$totalKeluarWIP=0;
+$totalAkhirWIP=0;
+
+$lastParent = '';
+$lastKelompok = '';
 ?>
 
-<table border="1">
+
+<table border="1" cellpadding="5" cellspacing="0">
   <tr>
-    <th colspan="8" style="font-size:16px;">KARTU STOK BULANAN</th>
-  </tr>
-  <tr>
-    <th colspan="8">Periode: <?= $judulBulan ?></th>
-  </tr>
+  <!-- LOGO -->
+  <td align="center" colspan="2">
+    <img src="logo.png">
+  </td>
 
-  <tr>
-    <th>No</th>
-    <th>Kelompok</th>
-    <th>Nama Barang</th>
-    <th>Stok Awal</th>
-    <th>Masuk</th>
-    <th>Keluar</th>
-    <th>Stok Akhir</th>
-    <th>Satuan</th>
-  </tr>
+  <!-- NAMA PERUSAHAAN -->
+  <td align="center" colspan="6">
+    <b style="font-size:32px;">PT. DIAN CIPTA SEJAHTERA</b><br>
+    <span><i>JL.Bantul Km 6,5 No.158 Nyemengan, Tirtonirmolo, Kasihan, Bantul, Yogyakarta</i></span>
+  </td>
 
-  <?php
-  $no = 1;
-  $totalAwal = 0;
-  $totalMasuk = 0;
-  $totalKeluar = 0;
-  $totalAkhir = 0;
+  <!-- BAGIAN -->
+  <td align="right" colspan="2">
+    <b>BAGIAN GUDANG</b>
+  </td>
+</tr>
+<tr>
+  <th colspan="10" style="font-size:16px;">LAPORAN STOK AKHIR BULAN</th>
+</tr>
+<tr>
+  <th colspan="10">Periode: <?= $judulBulan ?></th>
+</tr>
 
-  while($r = mysqli_fetch_assoc($q)){
-    $stokAkhir = $r['stok_awal'] + $r['masuk'] - $r['keluar'];
+<tr style="background:#ddd;font-weight:bold">
+  <th>No</th>
+  <th colspan="2">Kelompok</th>
+  <th>Stok Awal</th>
+  <th>Masuk</th>
+  <th>Keluar</th>
+  <th>Stok Akhir</th>
+  <th>Satuan</th>
+  <th>Konversi</th>
+  <th>Keterangan</th>
+</tr>
 
-    echo "<tr>";
-    echo "<td>".$no++."</td>";
-    echo "<td>".$r['nama_kelompok']."</td>";
-    echo "<td>".$r['nama_barang']."</td>";
-    echo "<td>".number_format($r['stok_awal'],2,'.','')."</td>";
-    echo "<td>".number_format($r['masuk'],2,'.','')."</td>";
-    echo "<td>".number_format($r['keluar'],2,'.','')."</td>";
-    echo "<td>".number_format($stokAkhir,2,'.','')."</td>";
-    echo "<td>".$r['satuan']."</td>";
-    echo "</tr>";
+<?php while($r = mysqli_fetch_assoc($q)): 
 
-    $totalAwal += $r['stok_awal'];
-    $totalMasuk += $r['masuk'];
-    $totalKeluar += $r['keluar'];
-    $totalAkhir += $stokAkhir;
-  }
-  ?>
+$stokAkhir = $r['stok_awal'] + $r['masuk'] - $r['keluar'];
 
-  <tr>
-    <th colspan="3">TOTAL</th>
-    <th><?= number_format($totalAwal,2,'.','') ?></th>
-    <th><?= number_format($totalMasuk,2,'.','') ?></th>
-    <th><?= number_format($totalKeluar,2,'.','') ?></th>
-    <th><?= number_format($totalAkhir,2,'.','') ?></th>
-    <th></th>
-  </tr>
+// skip repro
+if(strtolower($r['nama_barang'])=='repro briket') continue;
+
+// mapping powder
+$kelompokFix = $r['nama_kelompok'];
+if(strtolower($r['nama_barang'])=='powder'){
+  $kelompokFix = 'Powder';
+}
+
+$currentParent = strtolower(trim($r['parent_barang']));
+?>
+<?php if($urutanKelompok != $kelompokFix): ?>
+
+    <!-- PRINT TOTAL WIP SEBELUM PINDAH -->
+    <?php
+    if(strtolower($urutanKelompok)=='work in progress' 
+       && in_array($lastParent, ['hasil bongkar oven','hasil bongkar karantina'])){
+    ?>
+    <tr style="background:#fff3cd;font-weight:bold">
+      <td></td><td></td>
+      <td>JUMLAH <?= ucwords($lastParent) ?></td>
+      <td align="right"><?= number_format($totalAwalWIP,2) ?></td>
+      <td align="right"><?= number_format($totalMasukWIP,0) ?></td>
+      <td align="right"><?= number_format($totalKeluarWIP,0) ?></td>
+      <td align="right"><?= number_format($totalAkhirWIP,2) ?></td>
+      <td>Kg</td><td></td><td></td>
+    </tr>
+    <?php 
+      $totalAwalWIP=$totalMasukWIP=$totalKeluarWIP=$totalAkhirWIP=0;
+    } 
+    ?>
+
+    <!-- HEADER KELOMPOK -->
+    <tr style="background:#dcdcdc;font-weight:bold">
+      <td colspan="10">
+        <?= $kelompokMap[$kelompokFix] ?>. <?= $kelompokFix ?>
+      </td>
+    </tr>
+
+<?php 
+    $urutanKelompok = $kelompokFix;
+    $parentSebelumnya = '';
+    $urutanSub = 0;
+    $lastParent = '';
+endif; 
+?>
+
+<?php
+// ================= DETEKSI PINDAH PARENT (DALAM WIP) =================
+if(
+    $currentParent != $lastParent &&
+    strtolower($kelompokFix) == 'work in progress'
+){
+    if(in_array($lastParent, ['hasil bongkar oven','hasil bongkar karantina'])){
+?>
+<tr style="background:#fff3cd;font-weight:bold">
+  <td></td><td></td>
+  <td>JUMLAH <?= ucwords($lastParent) ?></td>
+  <td align="right"><?= number_format($totalAwalWIP,2) ?></td>
+  <td align="right"><?= number_format($totalMasukWIP,0) ?></td>
+  <td align="right"><?= number_format($totalKeluarWIP,0) ?></td>
+  <td align="right"><?= number_format($totalAkhirWIP,2) ?></td>
+  <td>Kg</td><td></td><td></td>
+</tr>
+<?php
+    }
+    $totalAwalWIP=$totalMasukWIP=$totalKeluarWIP=$totalAkhirWIP=0;
+}
+
+// ================= SUB KELOMPOK =================
+$currentParent = strtolower(trim($r['parent_barang']));
+$prevParent    = strtolower(trim($parentSebelumnya));
+
+if($prevParent !== $currentParent && strtolower($kelompokFix) != 'powder'):
+$urutanSub++;
+$no = 1;
+?>
+
+<tr style="background:#efefef;font-weight:bold">
+  <td></td>
+  <td colspan="2"><?= romawi($urutanSub) ?>. <?= $r['parent_barang'] ?></td>
+  <td colspan="7"></td>
+</tr>
+
+<?php
+$parentSebelumnya = $currentParent;
+endif;
+
+// ================= ARANG =================
+if($currentParent=='arang tempurung kelapa' && !$arangSudah):
+
+$totalAwal=0;$totalMasuk=0;$totalKeluar=0;$totalAkhir=0;
+$no=1;
+
+while($ar=mysqli_fetch_assoc($qArang)):
+$akhir=$ar['stok_awal']+$ar['masuk']-$ar['keluar'];
+$totalAwal+=$ar['stok_awal'];
+$totalMasuk+=$ar['masuk'];
+$totalKeluar+=$ar['keluar'];
+$totalAkhir+=$akhir;
+?>
+<tr>
+<td></td><td></td>
+<td><?= $no++ ?>. <?= $ar['nama_supplier'] ?></td>
+<td align="right"><?= number_format($ar['stok_awal'],2) ?></td>
+<td align="right"><?= number_format($ar['masuk'],0) ?></td>
+<td align="right"><?= number_format($ar['keluar'],0) ?></td>
+<td align="right"><?= number_format($akhir,2) ?></td>
+<td>Kg</td><td></td><td></td>
+</tr>
+<?php endwhile; ?>
+
+<tr style="background:#fff3cd;font-weight:bold">
+<td></td><td></td>
+<td>JUMLAH ARANG</td>
+<td align="right"><?= number_format($totalAwal,2) ?></td>
+<td align="right"><?= number_format($totalMasuk,0) ?></td>
+<td align="right"><?= number_format($totalKeluar,0) ?></td>
+<td align="right"><?= number_format($totalAkhir,2) ?></td>
+<td>Kg</td><td></td><td></td>
+</tr>
+
+<?php
+$arangSudah=true;
+continue;
+endif;
+
+// ================= WIP TOTAL =================
+if(
+    strtolower($kelompokFix) == 'work in progress' &&
+    in_array($currentParent, ['hasil bongkar oven','hasil bongkar karantina'])
+){
+$totalAwalWIP+=$r['stok_awal'];
+$totalMasukWIP+=$r['masuk'];
+$totalKeluarWIP+=$r['keluar'];
+$totalAkhirWIP+=$stokAkhir;
+}
+if($kelompokFix == 'Powder' && !$powderSudah):
+
+    $no = 1;
+    $totalAwal=0;$totalMasuk=0;$totalKeluar=0;$totalAkhir=0;
+
+    while($p = mysqli_fetch_assoc($qPowder)):
+
+        $akhir = $p['stok_awal'] + $p['masuk'] - $p['keluar'];
+
+        $totalAwal += $p['stok_awal'];
+        $totalMasuk += $p['masuk'];
+        $totalKeluar += $p['keluar'];
+        $totalAkhir += $akhir;
+?>
+<tr>
+<td></td><td></td>
+<td><?= $no++ ?>. <?= $p['nama_supplier'] ?></td>
+<td align="right"><?= number_format($p['stok_awal'],2) ?></td>
+<td align="right"><?= number_format($p['masuk'],0) ?></td>
+<td align="right"><?= number_format($p['keluar'],0) ?></td>
+<td align="right"><?= number_format($akhir,2) ?></td>
+<td>Kg</td><td></td><td></td>
+</tr>
+<?php endwhile; ?>
+
+<tr style="background:#fff3cd;font-weight:bold">
+<td></td><td></td>
+<td>JUMLAH POWDER</td>
+<td align="right"><?= number_format($totalAwal,2) ?></td>
+<td align="right"><?= number_format($totalMasuk,0) ?></td>
+<td align="right"><?= number_format($totalKeluar,0) ?></td>
+<td align="right"><?= number_format($totalAkhir,2) ?></td>
+<td>Kg</td><td></td><td></td>
+</tr>
+
+<?php
+$powderSudah = true;
+continue;
+endif;
+// ================= DATA NORMAL =================
+?>
+<tr>
+<td><?= $no++ ?></td>
+<td></td>
+<td><?= $r['nama_barang'] ?></td>
+<td align="right"><?= number_format($r['stok_awal'],2) ?></td>
+<td align="right"><?= number_format($r['masuk'],0) ?></td>
+<td align="right"><?= number_format($r['keluar'],0) ?></td>
+<td align="right"><?= number_format($stokAkhir,2) ?></td>
+<td><?= $r['satuan'] ?></td>
+<td></td><td></td>
+</tr>
+
+<?php
+$lastParent=$currentParent;
+$lastKelompok=$kelompokFix;
+endwhile;
+
+// ================= FINAL PRINT JIKA WIP TERAKHIR =================
+if(
+    strtolower($lastKelompok) == 'work in progress' &&
+    in_array($lastParent, ['hasil bongkar oven','hasil bongkar karantina'])
+){
+?>
+<tr style="background:#fff3cd;font-weight:bold">
+  <td></td><td></td>
+  <td>JUMLAH <?= ucwords($lastParent) ?></td>
+  <td align="right"><?= number_format($totalAwalWIP,2) ?></td>
+  <td align="right"><?= number_format($totalMasukWIP,0) ?></td>
+  <td align="right"><?= number_format($totalKeluarWIP,0) ?></td>
+  <td align="right"><?= number_format($totalAkhirWIP,2) ?></td>
+  <td>Kg</td><td></td><td></td>
+</tr>
+<?php
+}
+?>
+
 </table>

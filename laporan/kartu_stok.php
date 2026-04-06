@@ -85,7 +85,6 @@ LEFT JOIN mutasi_detail md
 
 LEFT JOIN mutasi m
     ON m.id_mutasi = md.id_mutasi
-    AND YEAR(m.tanggal) = '$tahun'
 
 LEFT JOIN jenis_mutasi jm
     ON jm.id_jenis = m.id_jenis
@@ -97,41 +96,69 @@ GROUP BY
     b.id_barang
 
 ORDER BY 
-  
-  CASE 
-    WHEN b.nama_barang = 'Powder' THEN 2
-    WHEN kb1.nama_kelompok = 'Bahan Baku' THEN 1
-    WHEN kb1.nama_kelompok = 'Bahan Baku Pendukung' THEN 3
-    WHEN kb1.nama_kelompok = 'Work In Progress' THEN 4
-    WHEN kb1.nama_kelompok = 'Barang Jadi' THEN 5
-    ELSE 99
-  END,
 
-  CASE 
-    WHEN kb2.nama_kelompok = 'Arang Tempurung Kelapa' THEN 1
-    WHEN kb2.nama_kelompok = 'AFKIR' THEN 2
-    WHEN kb2.nama_kelompok = 'Bahan Pendamping & Energi' THEN 3
-    ELSE 99
-  END,
+-- 🔥 URUTAN KELOMPOK UTAMA (INI JANGAN DIUBAH)
+CASE 
+  WHEN b.nama_barang = 'Powder' THEN 2
+  WHEN kb1.nama_kelompok = 'Bahan Baku' THEN 1
+  WHEN kb1.nama_kelompok = 'Bahan Baku Pendukung' THEN 3
+  WHEN kb1.nama_kelompok = 'Work In Progress' THEN 4
+  WHEN kb1.nama_kelompok = 'Barang Jadi' THEN 5
+  ELSE 99
+END,
 
-  CASE 
-    WHEN kb2.nama_kelompok = 'Inner Box Bahan Baku Pendukung' THEN 2
-    WHEN kb2.nama_kelompok = 'Master Box' THEN 3
-    WHEN kb2.nama_kelompok = 'Inner Plastik' THEN 1
-    WHEN kb2.nama_kelompok = 'Lainnya' THEN 4
-    ELSE 99
-  END,
+-- 🔥 SUB KELOMPOK LEVEL 1
+CASE 
+  WHEN kb2.nama_kelompok = 'Arang Tempurung Kelapa' THEN 1
+  WHEN kb2.nama_kelompok = 'AFKIR' THEN 2
+  WHEN kb2.nama_kelompok = 'Bahan Pendamping & Energi' THEN 3
+  ELSE 99
+END,
 
+-- 🔥 KHUSUS BAHAN PENDUKUNG (biar tidak bentrok)
+CASE 
+  WHEN kb1.nama_kelompok = 'Bahan Baku Pendukung' THEN
     CASE 
-    WHEN kb2.nama_kelompok = 'Hasil Bongkar Karantina' THEN 2
-    WHEN kb2.nama_kelompok = 'Hasil Bongkar Oven' THEN 1
-    ELSE 99
-  END,
+      WHEN kb2.nama_kelompok = 'Inner Plastik' THEN 1
+      WHEN kb2.nama_kelompok = 'Inner Box Bahan Baku Pendukung' THEN 2
+      WHEN kb2.nama_kelompok = 'Master Box' THEN 3
+      WHEN kb2.nama_kelompok = 'Lainnya' THEN 4
+      ELSE 99
+    END
+  ELSE 0
+END,
 
-    kb1.nama_kelompok,
-    kb2.nama_kelompok,
-    b.nama_barang
+-- 🔥 KHUSUS WIP (INI KUNCI MASALAH KAMU)
+CASE 
+  WHEN kb1.nama_kelompok = 'Work In Progress' THEN
+    CASE 
+      WHEN kb2.nama_kelompok = 'Hasil Bongkar Oven' THEN 1
+      WHEN kb2.nama_kelompok = 'Hasil Bongkar Karantina' THEN 2
+      ELSE 99
+    END
+  ELSE 0
+END,
+
+-- 🔥 KHUSUS BARANG JADI
+CASE 
+  WHEN kb1.nama_kelompok = 'Barang Jadi' THEN
+    CASE 
+      WHEN kb2.nama_kelompok = 'Inner Plastik/Pack' THEN 1
+      WHEN kb2.nama_kelompok = 'Master Box Barang Jadi' THEN 2
+      WHEN kb2.nama_kelompok = 'Reject Packing' THEN 3
+      WHEN kb2.nama_kelompok = 'Briket Riset' THEN 4
+      ELSE 99
+    END
+  ELSE 0
+END,
+
+-- 🔥 TERAKHIR BARU NAMA BARANG
+b.nama_barang
 ");
+
+if(!$q){
+    die("QUERY ERROR: " . mysqli_error($conn));
+}
 
 $qArang = mysqli_query($conn, "
 SELECT 
@@ -493,6 +520,7 @@ $kelompokMap = [
 $urutanKelompok = '';
 $urutanSub = 0;
 $no = 1;
+
 function romawi($angka){
     $map = [
         1=>"I",2=>"II",3=>"III",4=>"IV",5=>"V",
@@ -500,77 +528,262 @@ function romawi($angka){
     ];
     return $map[$angka] ?? $angka;
 }
+
 $powderSudahTampil = false;
-    $arangSudahTampil = false;
-// ambil semua data powder sekali saja
+$arangSudahTampil  = false;
+
+// ======================
+// AMBIL DATA POWDER
+// ======================
 $powderData = [];
 while($row = mysqli_fetch_assoc($qPowder)){
     $powderData[] = $row;
 }
-$parentSudahTampil = [];
 
+// ======================
+// TOTAL WIP
+// ======================
+$totalStokAwalWIP = 0;
+$totalMasukWIP    = 0;
+$totalKeluarWIP   = 0;
+$totalAkhirWIP    = 0;
+
+$lastParent = '';
+$parentSebelumnya = '';
+$lastKelompok = '';
 while($r = mysqli_fetch_assoc($q)){
 
     $stokAkhir = $r['stok_awal'] + $r['masuk'] - $r['keluar'];
 
-     // =========================
-    // 🔥 SKIP REPRO AGAR TIDAK TAMPIL SENDIRI
-    // =========================
+    // skip repro
     if(strtolower(trim($r['nama_barang'])) == 'repro briket'){
         continue;
     }
 
-    // =========================
-    // TENTUKAN KELOMPOK FIX
-    // =========================
     $kelompokFix = $r['nama_kelompok'];
 
-if(
-    strtolower(trim($r['nama_barang'])) == 'powder' ||
-    strtolower(trim($r['nama_barang'])) == 'repro briket'
-){
-    $kelompokFix = 'Powder';
-}
-    // =========================
-    // HEADER UTAMA (A, B, C)
-    // =========================
-    if($urutanKelompok != $kelompokFix){
-
-        echo "
-        <tr style='background:#dcdcdc;font-weight:bold'>
-            <td colspan='10'>".$kelompokMap[$kelompokFix].". ".$kelompokFix."</td>
-        </tr>
-        ";
-
-        $urutanKelompok = $kelompokFix;
-        $urutanSub = 0;
-        $parentSebelumnya = '';
+    if(
+        strtolower(trim($r['nama_barang'])) == 'powder' ||
+        strtolower(trim($r['nama_barang'])) == 'repro briket'
+    ){
+        $kelompokFix = 'Powder';
     }
 
-// =========================
-// KHUSUS POWDER (FIX FINAL)
-// =========================
-if($kelompokFix == 'Powder'){
+    $currentParent = strtolower(trim($r['parent_barang']));
+    
+    if($lastParent == ''){
+    $lastParent = $currentParent;
+}
+    // ======================
+    // HEADER UTAMA
+    // ======================
+if($urutanKelompok != $kelompokFix){
 
-    if(!$powderSudahTampil){
+    // 🔥 CETAK TOTAL WIP SEBELUM PINDAH KE KELOMPOK LAIN
+    if(strtolower($urutanKelompok) == 'work in progress' && in_array($lastParent, ['hasil bongkar oven','hasil bongkar karantina'])){
+        echo "
+        <tr style='background:#fff3cd;font-weight:bold'>
+            <td></td>
+            <td></td>
+            <td>JUMLAH ".ucwords($lastParent)."</td>
+            <td class='angka'>".number_format($totalStokAwalWIP,2)."</td>
+            <td class='angka'>".number_format($totalMasukWIP,0)."</td>
+            <td class='angka'>".number_format($totalKeluarWIP,0)."</td>
+            <td class='angka'>".number_format($totalAkhirWIP,2)."</td>
+            <td>Kg</td>
+            <td></td>
+            <td></td>
+        </tr>
+        ";
+    }
 
-        $no = 1;
+    echo "
+    <tr style='background:#dcdcdc;font-weight:bold'>
+        <td colspan='10'>".$kelompokMap[$kelompokFix].". ".$kelompokFix."</td>
+    </tr>
+    ";
 
-        foreach($powderData as $p){
+    $urutanKelompok = $kelompokFix;
+    $urutanSub = 0;
+    $parentSebelumnya = '';
+}
 
-            $stokAkhir = $p['stok_awal'] + $p['masuk'] - $p['keluar'];
+    // ======================
+    // POWDER
+    // ======================
+    if($kelompokFix == 'Powder'){
+
+        if(!$powderSudahTampil){
+
+            $totalStokAwalPowder = 0;
+            $totalMasukPowder    = 0;
+            $totalKeluarPowder   = 0;
+            $totalAkhirPowder    = 0;
+
+            $no = 1;
+
+            foreach($powderData as $p){
+
+                $stokAkhir = $p['stok_awal'] + $p['masuk'] - $p['keluar'];
+
+                $totalStokAwalPowder += $p['stok_awal'];
+                $totalMasukPowder    += $p['masuk'];
+                $totalKeluarPowder   += $p['keluar'];
+                $totalAkhirPowder    += $stokAkhir;
+
+                echo "
+                <tr>
+                    <td></td>
+                    <td></td>
+                    <td>".$no.". ".$p['nama_supplier']."</td>
+                    <td class='angka'>".number_format($p['stok_awal'],2)."</td>
+                    <td class='angka'>".number_format($p['masuk'],0)."</td>
+                    <td class='angka'>".number_format($p['keluar'],0)."</td>
+                    <td class='angka'>".number_format($stokAkhir,2)."</td>
+                    <td>Kg</td>
+                    <td></td>
+                    <td></td>
+                </tr>
+                ";
+
+                $no++;
+            }
+
+            $reproData = mysqli_fetch_assoc($qRepro);
+            $stokAwalRepro = $reproData['stok_awal'] ?? 0;
+            $masukRepro    = $reproData['masuk'] ?? 0;
+            $keluarRepro   = $reproData['keluar'] ?? 0;
+            $akhirRepro    = $stokAwalRepro + $masukRepro - $keluarRepro;
+
+            $totalStokAwalPowder += $stokAwalRepro;
+            $totalMasukPowder    += $masukRepro;
+            $totalKeluarPowder   += $keluarRepro;
+            $totalAkhirPowder    += $akhirRepro;
 
             echo "
             <tr>
                 <td></td>
                 <td></td>
-                <td>".$no.". ".$p['nama_supplier']."</td>
-                <td class='angka'>".number_format($p['stok_awal'],2)."</td>
-                <td class='angka'>".number_format($p['masuk'],0)."</td>
-                <td class='angka'>".number_format($p['keluar'],0)."</td>
+                <td>".$no.". Repro Briket</td>
+                <td class='angka'>".number_format($stokAwalRepro,2)."</td>
+                <td class='angka'>".number_format($masukRepro,0)."</td>
+                <td class='angka'>".number_format($keluarRepro,0)."</td>
+                <td class='angka'>".number_format($akhirRepro,2)."</td>
+                <td>Kg</td>
+                <td></td>
+                <td></td>
+            </tr>
+            ";
+
+            echo "
+            <tr style='background:#fff3cd;font-weight:bold'>
+                <td></td>
+                <td></td>
+                <td>JUMLAH POWDER</td>
+                <td class='angka'>".number_format($totalStokAwalPowder,2)."</td>
+                <td class='angka'>".number_format($totalMasukPowder,0)."</td>
+                <td class='angka'>".number_format($totalKeluarPowder,0)."</td>
+                <td class='angka'>".number_format($totalAkhirPowder,2)."</td>
+                <td>Kg</td>
+                <td></td>
+                <td></td>
+            </tr>
+            ";
+
+            $powderSudahTampil = true;
+        }
+
+        continue;
+    }
+
+// ======================
+// DETEKSI PINDAH PARENT (FIX UTAMA)
+// ======================
+if(
+    $currentParent != $lastParent &&
+    strtolower($kelompokFix) == 'work in progress'
+){
+
+    if(in_array($lastParent, ['hasil bongkar oven','hasil bongkar karantina'])){
+        echo "
+        <tr style='background:#fff3cd;font-weight:bold'>
+            <td></td>
+            <td></td>
+            <td>JUMLAH ".ucwords($lastParent)."</td>
+            <td class='angka'>".number_format($totalStokAwalWIP,2)."</td>
+            <td class='angka'>".number_format($totalMasukWIP,0)."</td>
+            <td class='angka'>".number_format($totalKeluarWIP,0)."</td>
+            <td class='angka'>".number_format($totalAkhirWIP,2)."</td>
+            <td>Kg</td>
+            <td></td>
+            <td></td>
+        </tr>
+        ";
+    }
+
+    // reset total
+    $totalStokAwalWIP = 0;
+    $totalMasukWIP    = 0;
+    $totalKeluarWIP   = 0;
+    $totalAkhirWIP    = 0;
+}
+    // ======================
+    // HEADER SUB
+    // ======================
+    if($parentSebelumnya != $r['parent_barang']){
+
+        $urutanSub++;
+
+        echo "
+        <tr style='background:#efefef;font-weight:bold'>
+            <td></td>
+            <td colspan='2'>".romawi($urutanSub).". ".$r['parent_barang']."</td>
+            <td colspan='7'></td>
+        </tr>
+        ";
+
+        $parentSebelumnya = $r['parent_barang'];
+        $no = 1;
+    }
+
+    // ======================
+    // ARANG
+    // ======================
+    if(strtolower(trim($r['parent_barang'])) == 'arang tempurung kelapa'){
+
+        if($arangSudahTampil){
+            continue;
+        }
+
+        mysqli_data_seek($qArang, 0);
+
+        $no = 1;
+
+        $totalStokAwal = 0;
+        $totalMasuk    = 0;
+        $totalKeluar   = 0;
+        $totalAkhir    = 0;
+
+        while($ar = mysqli_fetch_assoc($qArang)){
+
+            $stokAkhir = $ar['stok_awal'] + $ar['masuk'] - $ar['keluar'];
+
+            $totalStokAwal += $ar['stok_awal'];
+            $totalMasuk    += $ar['masuk'];
+            $totalKeluar   += $ar['keluar'];
+            $totalAkhir    += $stokAkhir;
+
+            echo "
+            <tr>
+                <td></td>
+                <td></td>
+                <td>".$no.". ".$ar['nama_supplier']." - ".$ar['alamat']."</td>
+                <td class='angka'>".number_format($ar['stok_awal'],2)."</td>
+                <td class='angka'>".number_format($ar['masuk'],0)."</td>
+                <td class='angka'>".number_format($ar['keluar'],0)."</td>
                 <td class='angka'>".number_format($stokAkhir,2)."</td>
                 <td>Kg</td>
-                <td class='angka'></td>
+                <td></td>
                 <td></td>
             </tr>
             ";
@@ -578,92 +791,15 @@ if($kelompokFix == 'Powder'){
             $no++;
         }
 
-        // 🔥 TAMBAHAN REPRO BRIKET (REAL DATA)
-        $reproData = mysqli_fetch_assoc($qRepro);
-        $stokAwalRepro = $reproData['stok_awal'] ?? 0;
-        $masukRepro    = $reproData['masuk'] ?? 0;
-        $keluarRepro   = $reproData['keluar'] ?? 0;
-        $akhirRepro    = $stokAwalRepro + $masukRepro - $keluarRepro;
-
         echo "
-        <tr>
+        <tr style='background:#fff3cd;font-weight:bold'>
             <td></td>
             <td></td>
-            <td>".$no.". Repro Briket</td>
-            <td class='angka'>".number_format($stokAwalRepro,2)."</td>
-            <td class='angka'>".number_format($masukRepro,0)."</td>
-            <td class='angka'>".number_format($keluarRepro,0)."</td>
-            <td class='angka'>".number_format($akhirRepro,2)."</td>
-            <td>Kg</td>
-            <td class='angka'></td>
-            <td></td>
-        </tr>
-        ";
-
-        $powderSudahTampil = true;
-    }
-
-    continue;
-}
-
-    // =========================
-    // HEADER LEVEL 2 (ROMAWI)
-    // =========================
-    $parentKey = strtolower(trim($kelompokFix . '|' . $r['parent_barang']));
-
-if($parentSebelumnya != $r['parent_barang']){
-
-    $urutanSub++;
-
-    echo "
-    <tr style='background:#efefef;font-weight:bold'>
-        <td></td>
-        <td colspan='2'>".romawi($urutanSub).". ".$r['parent_barang']."</td>
-        <td colspan='7'></td>
-    </tr>
-    ";
-
-    $parentSebelumnya = $r['parent_barang'];
-    $no = 1;
-}
-
-    // =========================
-    // KHUSUS ARANG → SUPPLIER
-    // =========================
-if(strtolower(trim($r['parent_barang'])) == 'arang tempurung kelapa'){
-    if($arangSudahTampil){
-        continue;
-    }
-
-    // 🔥 reset pointer (WAJIB)
-    mysqli_data_seek($qArang, 0);
-
-    $no = 1;
-
-    $totalStokAwal = 0;
-    $totalMasuk    = 0;
-    $totalKeluar   = 0;
-    $totalAkhir    = 0;
-
-    while($ar = mysqli_fetch_assoc($qArang)){
-
-        $stokAkhir = $ar['stok_awal'] + $ar['masuk'] - $ar['keluar'];
-
-        // akumulasi total
-        $totalStokAwal += $ar['stok_awal'];
-        $totalMasuk    += $ar['masuk'];
-        $totalKeluar   += $ar['keluar'];
-        $totalAkhir    += $stokAkhir;
-
-        echo "
-        <tr>
-            <td></td>
-            <td></td>
-            <td>".$no.". ".$ar['nama_supplier']." - ".$ar['alamat']."</td>
-            <td class='angka'>".number_format($ar['stok_awal'],2)."</td>
-            <td class='angka'>".number_format($ar['masuk'],0)."</td>
-            <td class='angka'>".number_format($ar['keluar'],0)."</td>
-            <td class='angka'>".number_format($stokAkhir,2)."</td>
+            <td>JUMLAH ARANG TEMPURUNG</td>
+            <td class='angka'>".number_format($totalStokAwal,2)."</td>
+            <td class='angka'>".number_format($totalMasuk,0)."</td>
+            <td class='angka'>".number_format($totalKeluar,0)."</td>
+            <td class='angka'>".number_format($totalAkhir,2)."</td>
             <td>Kg</td>
             <td></td>
             <td></td>
@@ -671,70 +807,80 @@ if(strtolower(trim($r['parent_barang'])) == 'arang tempurung kelapa'){
         ";
 
         $arangSudahTampil = true;
-
-        $no++;
+        continue;
     }
 
-    // 🔥 TOTAL (SEKALI SAJA & SUDAH BENAR)
+    // ======================
+    // AKUMULASI WIP
+    // ======================
+    if(
+        strtolower($kelompokFix) == 'work in progress' &&
+        in_array($currentParent, ['hasil bongkar oven','hasil bongkar karantina'])
+    ){
+        $totalStokAwalWIP += $r['stok_awal'];
+        $totalMasukWIP    += $r['masuk'];
+        $totalKeluarWIP   += $r['keluar'];
+        $totalAkhirWIP    += $stokAkhir;
+    }
+
+    // ======================
+    // BARANG NORMAL
+    // ======================
     echo "
-    <tr style='background:#fff3cd;font-weight:bold'>
+    <tr>
         <td></td>
         <td></td>
-        <td>JUMLAH ARANG TEMPURUNG</td>
-        <td class='angka'>".number_format($totalStokAwal,2)."</td>
-        <td class='angka'>".number_format($totalMasuk,0)."</td>
-        <td class='angka'>".number_format($totalKeluar,0)."</td>
-        <td class='angka'>".number_format($totalAkhir,2)."</td>
-        <td>Kg</td>
+        <td>".$no.". ".$r['nama_barang']."</td>
+        <td class='angka'>".number_format($r['stok_awal'],2)."</td>
+        <td class='angka'>".number_format($r['masuk'],0)."</td>
+        <td class='angka'>".number_format($r['keluar'],0)."</td>
+        <td class='angka'>".number_format($stokAkhir,2)."</td>
+        <td>".$r['satuan']."</td>
         <td></td>
         <td></td>
     </tr>
     ";
 
-    continue;
-    }else{
-
-        // =========================
-        // BARANG NORMAL
-        // =========================
-        echo "
-        <tr>
-            <td></td>
-            <td></td>
-            <td>".$no.". ".$r['nama_barang']."</td>
-            <td class='angka'>".number_format($r['stok_awal'],2)."</td>
-            <td class='angka'>".number_format($r['masuk'],0)."</td>
-            <td class='angka'>".number_format($r['keluar'],0)."</td>
-            <td class='angka'>".number_format($stokAkhir,2)."</td>
-            <td>".$r['satuan']."</td>
-            <td class='angka'></td>
-            <td></td>
-        </tr>
-        ";
-    }
-
     $no++;
+
+    $lastParent = $currentParent;
+$lastKelompok = $kelompokFix;
+}
+
+// ======================
+// FINAL PRINT JIKA WIP TERAKHIR
+// ======================
+if(
+    strtolower($lastKelompok) == 'work in progress' &&
+    in_array($lastParent, ['hasil bongkar oven','hasil bongkar karantina'])
+){
+    echo "
+    <tr style='background:#fff3cd;font-weight:bold'>
+        <td></td>
+        <td></td>
+        <td>JUMLAH ".ucwords($lastParent)."</td>
+        <td class='angka'>".number_format($totalStokAwalWIP,2)."</td>
+        <td class='angka'>".number_format($totalMasukWIP,0)."</td>
+        <td class='angka'>".number_format($totalKeluarWIP,0)."</td>
+        <td class='angka'>".number_format($totalAkhirWIP,2)."</td>
+        <td>Kg</td>
+        <td></td>
+        <td></td>
+    </tr>
+    ";
 }
 ?>
 
   </tbody>
 
   <tfoot>
-    <tr class="table-secondary fw-bold">
-      <td colspan="3" class="text-end">TOTAL</td>
-      <td class="angka">0</td>
-      <td class="angka">0</td>
-      <td class="angka">0</td>
-      <td class="angka">0</td>
-      <td colspan="2"></td>
-    </tr>
   </tfoot>
 </table>
       </div>
 
       <div class="mt-2">
         <small class="text-muted">
-          Catatan: Stok Awal dihitung dari saldo mutasi sebelum tanggal <b><?= $tglAwal ?></b>.
+          Catatan: Stok Awal dihitung dari saldo mutasi sebelum tanggal <b><?= $tglAwal ?> </b>atau ditambah saat tanggal tersebut.
         </small>
       </div>
 
