@@ -25,70 +25,28 @@ SELECT
     /* =========================
        STOK AWAL
     ========================= */
-      IFNULL(
-          SUM(
-              CASE 
-                  /* PRIORITAS 1: STOK AWAL BULAN INI */
-                  WHEN jm.tipe = 'STOKAWAL'
-                  AND DATE_FORMAT(m.tanggal,'%Y-%m') = '$tahun-$bulan'
-                      THEN md.jumlah
-                  ELSE 0
-              END
-          ),
-
-          /* PRIORITAS 2: SALDO SEBELUM BULAN */
-          SUM(
-              CASE 
-                  WHEN m.tanggal < '$tglAwal' 
-                  AND m.arah='MASUK'
-                      THEN md.jumlah
-
-                  WHEN m.tanggal < '$tglAwal' 
-                  AND m.arah='KELUAR'
-                      THEN -md.jumlah
-
-                  ELSE 0
-              END
-          )
-
-      ) AS stok_awal,
-    /* CEK ADA STOK AWAL ATAU TIDAK */
-CASE 
-    WHEN SUM(
+    IFNULL(SUM(
         CASE 
+
+            /* STOK AWAL BULAN INI */
             WHEN jm.tipe = 'STOKAWAL'
             AND DATE_FORMAT(m.tanggal,'%Y-%m') = '$tahun-$bulan'
-            THEN 1 ELSE 0
-        END
-    ) > 0
-
-    THEN 
-        /* PAKAI STOK AWAL */
-        SUM(
-            CASE 
-                WHEN jm.tipe = 'STOKAWAL'
-                AND DATE_FORMAT(m.tanggal,'%Y-%m') = '$tahun-$bulan'
-                THEN md.jumlah
-                ELSE 0
-            END
-        )
-
-    ELSE 
-        /* PAKAI SALDO SEBELUMNYA */
-        SUM(
-            CASE 
-                WHEN m.tanggal < '$tglAwal' 
-                AND m.arah='MASUK'
                 THEN md.jumlah
 
-                WHEN m.tanggal < '$tglAwal' 
-                AND m.arah='KELUAR'
+            /* SALDO SEBELUM BULAN */
+            WHEN m.tanggal < '$tglAwal' 
+            AND m.arah='MASUK'
+            AND (jm.tipe IS NULL OR jm.tipe != 'STOKAWAL')
+                THEN md.jumlah
+
+            WHEN m.tanggal < '$tglAwal' 
+            AND m.arah='KELUAR'
                 THEN -md.jumlah
 
-                ELSE 0
-            END
-        )
-END AS stok_awal,
+            ELSE 0
+        END
+    ),0) AS stok_awal,
+
     /* =========================
        MASUK
     ========================= */
@@ -231,52 +189,15 @@ FROM supplier s
 LEFT JOIN (
   SELECT 
     md.id_supplier,
-
-    CASE 
-      /* CEK ADA STOK AWAL BULAN INI */
-      WHEN SUM(
-        CASE 
-          WHEN m.jenis = 'AWAL'
-          AND DATE_FORMAT(m.tanggal,'%Y-%m') = '$tahun-$bulan'
-          THEN 1 ELSE 0
-        END
-      ) > 0
-
-      THEN 
-        /* PAKAI STOK AWAL */
-        SUM(
-          CASE 
-            WHEN m.jenis = 'AWAL'
-            AND DATE_FORMAT(m.tanggal,'%Y-%m') = '$tahun-$bulan'
-            THEN md.jumlah
-            ELSE 0
-          END
-        )
-
-      ELSE 
-        /* PAKAI SALDO SEBELUM BULAN */
-        SUM(
-          CASE 
-            WHEN m.tanggal < '$tglAwal'
-            AND m.arah='MASUK'
-            THEN md.jumlah
-
-            WHEN m.tanggal < '$tglAwal'
-            AND m.arah='KELUAR'
-            THEN -md.jumlah
-
-            ELSE 0
-          END
-        )
-    END AS stok_awal
-
+    SUM(md.jumlah) AS stok_awal
   FROM mutasi m
-  JOIN mutasi_detail md ON md.id_mutasi = m.id_mutasi
+  JOIN mutasi_detail md 
+    ON md.id_mutasi = m.id_mutasi
   JOIN barang b ON b.id_barang = md.id_barang
   JOIN kelompok_barang kb2 ON kb2.id_kelompok = b.id_kelompok
-
-  WHERE kb2.nama_kelompok = 'Arang Tempurung Kelapa'
-
+  WHERE m.jenis = 'AWAL'
+    AND kb2.nama_kelompok = 'Arang Tempurung Kelapa'
+    AND DATE_FORMAT(m.tanggal,'%Y-%m') = '$tahun-$bulan'
   GROUP BY md.id_supplier
 ) sa ON sa.id_supplier = s.id_supplier
 
@@ -368,52 +289,14 @@ FROM supplier s
 LEFT JOIN (
   SELECT 
     md.id_supplier,
-
-    CASE 
-      /* CEK ADA STOK AWAL */
-      WHEN SUM(
-        CASE 
-          WHEN (jm.tipe = 'STOKAWAL' OR m.jenis='AWAL')
-          AND DATE_FORMAT(m.tanggal,'%Y-%m') = '$tahun-$bulan'
-          THEN 1 ELSE 0
-        END
-      ) > 0
-
-      THEN 
-        /* PAKAI STOK AWAL */
-        SUM(
-          CASE 
-            WHEN (jm.tipe = 'STOKAWAL' OR m.jenis='AWAL')
-            AND DATE_FORMAT(m.tanggal,'%Y-%m') = '$tahun-$bulan'
-            THEN md.jumlah
-            ELSE 0
-          END
-        )
-
-      ELSE 
-        /* PAKAI SALDO SEBELUMNYA */
-        SUM(
-          CASE 
-            WHEN m.tanggal < '$tglAwal'
-            AND m.arah='MASUK'
-            THEN md.jumlah
-
-            WHEN m.tanggal < '$tglAwal'
-            AND m.arah='KELUAR'
-            THEN -md.jumlah
-
-            ELSE 0
-          END
-        )
-    END AS stok_awal
-
+    SUM(md.jumlah) AS stok_awal
   FROM mutasi m
   JOIN mutasi_detail md ON md.id_mutasi = m.id_mutasi
   JOIN barang b ON b.id_barang = md.id_barang
   LEFT JOIN jenis_mutasi jm ON jm.id_jenis = m.id_jenis
-
-  WHERE b.nama_barang IN ('Powder','Repro Briket')
-
+  WHERE (jm.tipe = 'STOKAWAL' OR m.jenis = 'AWAL')
+    AND b.nama_barang IN ('Powder','Repro Briket')
+    AND DATE_FORMAT(m.tanggal,'%Y-%m') = '$tahun-$bulan'
   GROUP BY md.id_supplier
 ) sa ON sa.id_supplier = s.id_supplier
 
@@ -499,6 +382,7 @@ $namaBulan = [
 ];
 
 $judulBulan = ($namaBulan[$bulan] ?? $bulan) . " " . $tahun;
+
 
 ?>
 

@@ -15,8 +15,8 @@ $tglAkhir = date("Y-m-t", strtotime($tglAwal));
 // ================================
 // HEADER EXCEL
 // ================================
-//header("Content-Type: application/vnd.ms-excel");
-//header("Content-Disposition: attachment; filename=Kartu_Stok_$bulan-$tahun.xls");
+header("Content-Type: application/vnd.ms-excel");
+header("Content-Disposition: attachment; filename=Kartu_Stok_$bulan-$tahun.xls");
 
 echo "\xEF\xBB\xBF";
 
@@ -425,42 +425,110 @@ $totalAkhirWIP=0;
 $lastParent = '';
 $lastKelompok = '';
 ?>
+<style>
+/* 1. Nama Perusahaan */
+.nama-perusahaan {
+  font-family: "Bernard MT Condensed", serif;
+  font-size: 28px;
+  font-weight: bold;
+  letter-spacing: 2px;
+}
 
+/* 2. Alamat */
+.alamat-perusahaan {
+  font-family: "Monotype Corsiva", cursive;
+  font-size: 16px;
+  font-style: italic;
+}
 
-<table border="1" cellpadding="5" cellspacing="0">
-  <tr>
+/* 3. Bagian Gudang */
+.bagian-gudang {
+  font-family: "Trebuchet MS", sans-serif;
+  font-size: 16px;
+  font-weight: bold;
+}
+
+/* 4. Judul Laporan */
+.judul-laporan {
+  font-family: "Britannic Bold", sans-serif;
+  font-size: 18px;
+  font-weight: bold;
+  text-transform: uppercase;
+}
+
+/* 5. Isi Tabel */
+.isi-tabel {
+  font-family: "Calibri", sans-serif;
+  font-size: 12px;
+}
+
+/* Header tabel */
+.header-tabel {
+  font-family: "Calibri", sans-serif;
+  font-size: 12px;
+  font-weight: bold;
+  text-align: center;
+  background: #f2e1d0;
+}
+</style>
+
+<?php
+$path = 'logo.jpg';
+$type = pathinfo($path, PATHINFO_EXTENSION);
+$data = file_get_contents($path);
+$base64 = 'data:image/' . $type . ';base64,' . base64_encode($data);
+?>
+
+<table border="1" width="50%" cellspacing="0" cellpadding="5">
+
+<tr>
   <!-- LOGO -->
-  <td align="center" colspan="2">
-    <img src="logo.png">
+  <td width="15%" align="center" rowspan="2">
+    <img src="<?= $base64 ?>" width="120">
   </td>
 
   <!-- NAMA PERUSAHAAN -->
-  <td align="center" colspan="6">
-    <b style="font-size:32px;">PT. DIAN CIPTA SEJAHTERA</b><br>
-    <span><i>JL.Bantul Km 6,5 No.158 Nyemengan, Tirtonirmolo, Kasihan, Bantul, Yogyakarta</i></span>
+  <td align="center">
+    <b style="font-size:42px; letter-spacing:2px;" class="nama-perusahaan">
+      PT DIAN CIPTA SEJAHTERA
+    </b>
   </td>
 
   <!-- BAGIAN -->
-  <td align="right" colspan="2">
-    <b>BAGIAN GUDANG</b>
+  <td width="15%" align="center" rowspan="2">
+    <i class="bagian-gudang" style="font-size:32px;">Bagian</i><br>
+    <b style="font-size:32px;" class="bagian-gudang">GUDANG</b>
   </td>
 </tr>
+
 <tr>
-  <th colspan="10" style="font-size:16px;">LAPORAN STOK AKHIR BULAN</th>
-</tr>
-<tr>
-  <th colspan="10">Periode: <?= $judulBulan ?></th>
+  <!-- ALAMAT -->
+  <td align="center">
+    <i class="alamat-perusahaan">
+      Jl. Bantul Km 6,5 No.158 Nyemengan, Tirtonirmolo,
+      Kasihan, Bantul, Yogyakarta
+    </i>
+  </td>
 </tr>
 
-<tr style="background:#ddd;font-weight:bold">
+</table>
+
+<table border="1" width="50%" cellpadding="5" cellspacing="0">
+<tr>
+  <th colspan="10" style="font-size:16px;" class="judul-laporan">LAPORAN STOK AKHIR BULAN</th>
+</tr>
+<tr>
+  <th colspan="10">Bulan: <?= $judulBulan ?></th>
+</tr>
+
+<tr style="background:#ddd;font-weight:bold" class="header-tabel">
   <th>No</th>
-  <th colspan="2">Kelompok</th>
+  <th colspan="2">Kelompok Bahan Baku</th>
   <th>Stok Awal</th>
   <th>Masuk</th>
   <th>Keluar</th>
   <th>Stok Akhir</th>
   <th>Satuan</th>
-  <th>Konversi</th>
   <th>Keterangan</th>
 </tr>
 
@@ -486,14 +554,14 @@ $currentParent = strtolower(trim($r['parent_barang']));
     if(strtolower($urutanKelompok)=='work in progress' 
        && in_array($lastParent, ['hasil bongkar oven','hasil bongkar karantina'])){
     ?>
-    <tr style="background:#fff3cd;font-weight:bold">
+    <tr style="background:#fff3cd;font-weight:bold" class="isi-tabel">
       <td></td><td></td>
       <td>JUMLAH <?= ucwords($lastParent) ?></td>
       <td align="right"><?= number_format($totalAwalWIP,2) ?></td>
       <td align="right"><?= number_format($totalMasukWIP,0) ?></td>
       <td align="right"><?= number_format($totalKeluarWIP,0) ?></td>
       <td align="right"><?= number_format($totalAkhirWIP,2) ?></td>
-      <td>Kg</td><td></td><td></td>
+      <td>Kg</td><td></td>
     </tr>
     <?php 
       $totalAwalWIP=$totalMasukWIP=$totalKeluarWIP=$totalAkhirWIP=0;
@@ -501,7 +569,7 @@ $currentParent = strtolower(trim($r['parent_barang']));
     ?>
 
     <!-- HEADER KELOMPOK -->
-    <tr style="background:#dcdcdc;font-weight:bold">
+    <tr style="background:#dcdcdc;font-weight:bold" class="isi-tabel">
       <td colspan="10">
         <?= $kelompokMap[$kelompokFix] ?>. <?= $kelompokFix ?>
       </td>
@@ -523,14 +591,14 @@ if(
 ){
     if(in_array($lastParent, ['hasil bongkar oven','hasil bongkar karantina'])){
 ?>
-<tr style="background:#fff3cd;font-weight:bold">
+<tr style="background:#fff3cd;font-weight:bold" class="isi-tabel">
   <td></td><td></td>
   <td>JUMLAH <?= ucwords($lastParent) ?></td>
   <td align="right"><?= number_format($totalAwalWIP,2) ?></td>
   <td align="right"><?= number_format($totalMasukWIP,0) ?></td>
   <td align="right"><?= number_format($totalKeluarWIP,0) ?></td>
   <td align="right"><?= number_format($totalAkhirWIP,2) ?></td>
-  <td>Kg</td><td></td><td></td>
+  <td>Kg</td><td></td>
 </tr>
 <?php
     }
@@ -546,7 +614,7 @@ $urutanSub++;
 $no = 1;
 ?>
 
-<tr style="background:#efefef;font-weight:bold">
+<tr style="background:#efefef;font-weight:bold" class="isi-tabel">
   <td></td>
   <td colspan="2"><?= romawi($urutanSub) ?>. <?= $r['parent_barang'] ?></td>
   <td colspan="7"></td>
@@ -569,25 +637,25 @@ $totalMasuk+=$ar['masuk'];
 $totalKeluar+=$ar['keluar'];
 $totalAkhir+=$akhir;
 ?>
-<tr>
+<tr class="isi-tabel">
 <td></td><td></td>
 <td><?= $no++ ?>. <?= $ar['nama_supplier'] ?></td>
 <td align="right"><?= number_format($ar['stok_awal'],2) ?></td>
 <td align="right"><?= number_format($ar['masuk'],0) ?></td>
 <td align="right"><?= number_format($ar['keluar'],0) ?></td>
 <td align="right"><?= number_format($akhir,2) ?></td>
-<td>Kg</td><td></td><td></td>
+<td>Kg</td><td></td>
 </tr>
 <?php endwhile; ?>
 
-<tr style="background:#fff3cd;font-weight:bold">
+<tr style="background:#fff3cd;font-weight:bold" class="isi-tabel">
 <td></td><td></td>
 <td>JUMLAH ARANG</td>
 <td align="right"><?= number_format($totalAwal,2) ?></td>
 <td align="right"><?= number_format($totalMasuk,0) ?></td>
 <td align="right"><?= number_format($totalKeluar,0) ?></td>
 <td align="right"><?= number_format($totalAkhir,2) ?></td>
-<td>Kg</td><td></td><td></td>
+<td>Kg</td><td></td>
 </tr>
 
 <?php
@@ -619,25 +687,25 @@ if($kelompokFix == 'Powder' && !$powderSudah):
         $totalKeluar += $p['keluar'];
         $totalAkhir += $akhir;
 ?>
-<tr>
+<tr class="isi-tabel">
 <td></td><td></td>
 <td><?= $no++ ?>. <?= $p['nama_supplier'] ?></td>
 <td align="right"><?= number_format($p['stok_awal'],2) ?></td>
 <td align="right"><?= number_format($p['masuk'],0) ?></td>
 <td align="right"><?= number_format($p['keluar'],0) ?></td>
 <td align="right"><?= number_format($akhir,2) ?></td>
-<td>Kg</td><td></td><td></td>
+<td>Kg</td><td></td>
 </tr>
 <?php endwhile; ?>
 
-<tr style="background:#fff3cd;font-weight:bold">
+<tr style="background:#fff3cd;font-weight:bold" class="isi-tabel">
 <td></td><td></td>
 <td>JUMLAH POWDER</td>
 <td align="right"><?= number_format($totalAwal,2) ?></td>
 <td align="right"><?= number_format($totalMasuk,0) ?></td>
 <td align="right"><?= number_format($totalKeluar,0) ?></td>
 <td align="right"><?= number_format($totalAkhir,2) ?></td>
-<td>Kg</td><td></td><td></td>
+<td>Kg</td><td></td>
 </tr>
 
 <?php
@@ -646,16 +714,16 @@ continue;
 endif;
 // ================= DATA NORMAL =================
 ?>
-<tr>
-<td><?= $no++ ?></td>
+<tr class="isi-tabel">
 <td></td>
-<td><?= $r['nama_barang'] ?></td>
+<td></td>
+<td> <?= $no++ ?>. <?= $r['nama_barang'] ?></td>
 <td align="right"><?= number_format($r['stok_awal'],2) ?></td>
 <td align="right"><?= number_format($r['masuk'],0) ?></td>
 <td align="right"><?= number_format($r['keluar'],0) ?></td>
 <td align="right"><?= number_format($stokAkhir,2) ?></td>
 <td><?= $r['satuan'] ?></td>
-<td></td><td></td>
+<td></td>
 </tr>
 
 <?php
@@ -669,14 +737,14 @@ if(
     in_array($lastParent, ['hasil bongkar oven','hasil bongkar karantina'])
 ){
 ?>
-<tr style="background:#fff3cd;font-weight:bold">
+<tr style="background:#fff3cd;font-weight:bold" class="isi-tabel">
   <td></td><td></td>
   <td>JUMLAH <?= ucwords($lastParent) ?></td>
   <td align="right"><?= number_format($totalAwalWIP,2) ?></td>
   <td align="right"><?= number_format($totalMasukWIP,0) ?></td>
   <td align="right"><?= number_format($totalKeluarWIP,0) ?></td>
   <td align="right"><?= number_format($totalAkhirWIP,2) ?></td>
-  <td>Kg</td><td></td><td></td>
+  <td>Kg</td><td></td>
 </tr>
 <?php
 }
