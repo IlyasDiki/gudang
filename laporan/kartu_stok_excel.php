@@ -41,28 +41,70 @@ SELECT
     /* =========================
        STOK AWAL
     ========================= */
-    IFNULL(SUM(
-        CASE 
+      IFNULL(
+          SUM(
+              CASE 
+                  /* PRIORITAS 1: STOK AWAL BULAN INI */
+                  WHEN jm.tipe = 'STOKAWAL'
+                  AND DATE_FORMAT(m.tanggal,'%Y-%m') = '$tahun-$bulan'
+                      THEN md.jumlah
+                  ELSE 0
+              END
+          ),
 
-            /* STOK AWAL BULAN INI */
+          /* PRIORITAS 2: SALDO SEBELUM BULAN */
+          SUM(
+              CASE 
+                  WHEN m.tanggal < '$tglAwal' 
+                  AND m.arah='MASUK'
+                      THEN md.jumlah
+
+                  WHEN m.tanggal < '$tglAwal' 
+                  AND m.arah='KELUAR'
+                      THEN -md.jumlah
+
+                  ELSE 0
+              END
+          )
+
+      ) AS stok_awal,
+    /* CEK ADA STOK AWAL ATAU TIDAK */
+CASE 
+    WHEN SUM(
+        CASE 
             WHEN jm.tipe = 'STOKAWAL'
             AND DATE_FORMAT(m.tanggal,'%Y-%m') = '$tahun-$bulan'
+            THEN 1 ELSE 0
+        END
+    ) > 0
+
+    THEN 
+        /* PAKAI STOK AWAL */
+        SUM(
+            CASE 
+                WHEN jm.tipe = 'STOKAWAL'
+                AND DATE_FORMAT(m.tanggal,'%Y-%m') = '$tahun-$bulan'
+                THEN md.jumlah
+                ELSE 0
+            END
+        )
+
+    ELSE 
+        /* PAKAI SALDO SEBELUMNYA */
+        SUM(
+            CASE 
+                WHEN m.tanggal < '$tglAwal' 
+                AND m.arah='MASUK'
                 THEN md.jumlah
 
-            /* SALDO SEBELUM BULAN */
-            WHEN m.tanggal < '$tglAwal' 
-            AND m.arah='MASUK'
-            AND (jm.tipe IS NULL OR jm.tipe != 'STOKAWAL')
-                THEN md.jumlah
-
-            WHEN m.tanggal < '$tglAwal' 
-            AND m.arah='KELUAR'
+                WHEN m.tanggal < '$tglAwal' 
+                AND m.arah='KELUAR'
                 THEN -md.jumlah
 
-            ELSE 0
-        END
-    ),0) AS stok_awal,
-
+                ELSE 0
+            END
+        )
+END AS stok_awal,
     /* =========================
        MASUK
     ========================= */
@@ -205,15 +247,52 @@ FROM supplier s
 LEFT JOIN (
   SELECT 
     md.id_supplier,
-    SUM(md.jumlah) AS stok_awal
+
+    CASE 
+      /* CEK ADA STOK AWAL BULAN INI */
+      WHEN SUM(
+        CASE 
+          WHEN m.jenis = 'AWAL'
+          AND DATE_FORMAT(m.tanggal,'%Y-%m') = '$tahun-$bulan'
+          THEN 1 ELSE 0
+        END
+      ) > 0
+
+      THEN 
+        /* PAKAI STOK AWAL */
+        SUM(
+          CASE 
+            WHEN m.jenis = 'AWAL'
+            AND DATE_FORMAT(m.tanggal,'%Y-%m') = '$tahun-$bulan'
+            THEN md.jumlah
+            ELSE 0
+          END
+        )
+
+      ELSE 
+        /* PAKAI SALDO SEBELUM BULAN */
+        SUM(
+          CASE 
+            WHEN m.tanggal < '$tglAwal'
+            AND m.arah='MASUK'
+            THEN md.jumlah
+
+            WHEN m.tanggal < '$tglAwal'
+            AND m.arah='KELUAR'
+            THEN -md.jumlah
+
+            ELSE 0
+          END
+        )
+    END AS stok_awal
+
   FROM mutasi m
-  JOIN mutasi_detail md 
-    ON md.id_mutasi = m.id_mutasi
+  JOIN mutasi_detail md ON md.id_mutasi = m.id_mutasi
   JOIN barang b ON b.id_barang = md.id_barang
   JOIN kelompok_barang kb2 ON kb2.id_kelompok = b.id_kelompok
-  WHERE m.jenis = 'AWAL'
-    AND kb2.nama_kelompok = 'Arang Tempurung Kelapa'
-    AND DATE_FORMAT(m.tanggal,'%Y-%m') = '$tahun-$bulan'
+
+  WHERE kb2.nama_kelompok = 'Arang Tempurung Kelapa'
+
   GROUP BY md.id_supplier
 ) sa ON sa.id_supplier = s.id_supplier
 
@@ -305,14 +384,52 @@ FROM supplier s
 LEFT JOIN (
   SELECT 
     md.id_supplier,
-    SUM(md.jumlah) AS stok_awal
+
+    CASE 
+      /* CEK ADA STOK AWAL */
+      WHEN SUM(
+        CASE 
+          WHEN (jm.tipe = 'STOKAWAL' OR m.jenis='AWAL')
+          AND DATE_FORMAT(m.tanggal,'%Y-%m') = '$tahun-$bulan'
+          THEN 1 ELSE 0
+        END
+      ) > 0
+
+      THEN 
+        /* PAKAI STOK AWAL */
+        SUM(
+          CASE 
+            WHEN (jm.tipe = 'STOKAWAL' OR m.jenis='AWAL')
+            AND DATE_FORMAT(m.tanggal,'%Y-%m') = '$tahun-$bulan'
+            THEN md.jumlah
+            ELSE 0
+          END
+        )
+
+      ELSE 
+        /* PAKAI SALDO SEBELUMNYA */
+        SUM(
+          CASE 
+            WHEN m.tanggal < '$tglAwal'
+            AND m.arah='MASUK'
+            THEN md.jumlah
+
+            WHEN m.tanggal < '$tglAwal'
+            AND m.arah='KELUAR'
+            THEN -md.jumlah
+
+            ELSE 0
+          END
+        )
+    END AS stok_awal
+
   FROM mutasi m
   JOIN mutasi_detail md ON md.id_mutasi = m.id_mutasi
   JOIN barang b ON b.id_barang = md.id_barang
   LEFT JOIN jenis_mutasi jm ON jm.id_jenis = m.id_jenis
-  WHERE (jm.tipe = 'STOKAWAL' OR m.jenis = 'AWAL')
-    AND b.nama_barang IN ('Powder','Repro Briket')
-    AND DATE_FORMAT(m.tanggal,'%Y-%m') = '$tahun-$bulan'
+
+  WHERE b.nama_barang IN ('Powder','Repro Briket')
+
   GROUP BY md.id_supplier
 ) sa ON sa.id_supplier = s.id_supplier
 
@@ -380,13 +497,51 @@ ORDER BY s.id_supplier
 
 $qRepro = mysqli_query($conn, "
 SELECT 
-  SUM(md.jumlah) AS stok_awal
+
+CASE 
+  /* CEK ADA STOK AWAL BULAN INI */
+  WHEN SUM(
+    CASE 
+      WHEN m.jenis='AWAL'
+      AND DATE_FORMAT(m.tanggal,'%Y-%m') = '$tahun-$bulan'
+      THEN 1 ELSE 0
+    END
+  ) > 0
+
+  THEN 
+    /* PAKAI STOK AWAL */
+    SUM(
+      CASE 
+        WHEN m.jenis='AWAL'
+        AND DATE_FORMAT(m.tanggal,'%Y-%m') = '$tahun-$bulan'
+        THEN md.jumlah
+        ELSE 0
+      END
+    )
+
+  ELSE 
+    /* PAKAI SALDO SEBELUM BULAN */
+    SUM(
+      CASE 
+        WHEN m.tanggal < '$tglAwal'
+        AND m.arah='MASUK'
+        THEN md.jumlah
+
+        WHEN m.tanggal < '$tglAwal'
+        AND m.arah='KELUAR'
+        THEN -md.jumlah
+
+        ELSE 0
+      END
+    )
+
+END AS stok_awal
+
 FROM mutasi m
 JOIN mutasi_detail md ON md.id_mutasi = m.id_mutasi
 JOIN barang b ON b.id_barang = md.id_barang
-WHERE m.jenis='AWAL'
-AND b.nama_barang='Repro Briket'
-AND DATE_FORMAT(m.tanggal,'%Y-%m') = '$tahun-$bulan'
+
+WHERE b.nama_barang='Repro Briket'
 ");
 
 // ================================
@@ -473,29 +628,34 @@ $lastKelompok = '';
 </style>
 
 <?php
-$path = 'logo.jpg';
-$type = pathinfo($path, PATHINFO_EXTENSION);
-$data = file_get_contents($path);
-$base64 = 'data:image/' . $type . ';base64,' . base64_encode($data);
+$path = __DIR__ . '/logo.jpg'; // 🔥 WAJIB FULL PATH
+
+if(file_exists($path)){
+    $type = pathinfo($path, PATHINFO_EXTENSION);
+    $data = file_get_contents($path);
+    $base64 = 'data:image/' . $type . ';base64,' . base64_encode($data);
+} else {
+    $base64 = '';
+}
 ?>
 
-<table border="1" width="50%" cellspacing="0" cellpadding="5">
+<table border="1" width="100%" cellspacing="0" cellpadding="5" style="table-layout:fixed;">
 
 <tr>
   <!-- LOGO -->
-  <td width="15%" align="center" rowspan="2">
-    <img src="<?= $base64 ?>" width="120">
+  <td width="15%" align="center" valign="middle" rowspan="2" colspan="2">
+    <img src="http://localhost/gudang/laporan/logo.jpg" width="80">
   </td>
 
   <!-- NAMA PERUSAHAAN -->
-  <td align="center">
+  <td align="center" colspan="5">
     <b style="font-size:42px; letter-spacing:2px;" class="nama-perusahaan">
       PT DIAN CIPTA SEJAHTERA
     </b>
   </td>
 
   <!-- BAGIAN -->
-  <td width="15%" align="center" rowspan="2">
+  <td width="15%" align="center" rowspan="2" colspan="2">
     <i class="bagian-gudang" style="font-size:32px;">Bagian</i><br>
     <b style="font-size:32px;" class="bagian-gudang">GUDANG</b>
   </td>
@@ -503,7 +663,7 @@ $base64 = 'data:image/' . $type . ';base64,' . base64_encode($data);
 
 <tr>
   <!-- ALAMAT -->
-  <td align="center">
+  <td align="center" colspan="5">
     <i class="alamat-perusahaan">
       Jl. Bantul Km 6,5 No.158 Nyemengan, Tirtonirmolo,
       Kasihan, Bantul, Yogyakarta
@@ -513,16 +673,16 @@ $base64 = 'data:image/' . $type . ';base64,' . base64_encode($data);
 
 </table>
 
-<table border="1" width="50%" cellpadding="5" cellspacing="0">
+<table border="1" width="100%" cellpadding="5" cellspacing="0" style="table-layout:fixed;">
 <tr>
-  <th colspan="10" style="font-size:16px;" class="judul-laporan">LAPORAN STOK AKHIR BULAN</th>
+  <th colspan="9" style="font-size:16px;" class="judul-laporan">LAPORAN STOK AKHIR BULAN</th>
 </tr>
 <tr>
-  <th colspan="10">Bulan: <?= $judulBulan ?></th>
+  <th colspan="9">Bulan: <?= $judulBulan ?></th>
 </tr>
 
 <tr style="background:#ddd;font-weight:bold" class="header-tabel">
-  <th>No</th>
+  <th width="5%">No</th>
   <th colspan="2">Kelompok Bahan Baku</th>
   <th>Stok Awal</th>
   <th>Masuk</th>
@@ -570,7 +730,7 @@ $currentParent = strtolower(trim($r['parent_barang']));
 
     <!-- HEADER KELOMPOK -->
     <tr style="background:#dcdcdc;font-weight:bold" class="isi-tabel">
-      <td colspan="10">
+      <td colspan="9">
         <?= $kelompokMap[$kelompokFix] ?>. <?= $kelompokFix ?>
       </td>
     </tr>
@@ -616,8 +776,8 @@ $no = 1;
 
 <tr style="background:#efefef;font-weight:bold" class="isi-tabel">
   <td></td>
-  <td colspan="2"><?= romawi($urutanSub) ?>. <?= $r['parent_barang'] ?></td>
-  <td colspan="7"></td>
+  <td colspan="2" width="5%"><?= romawi($urutanSub) ?>. <?= $r['parent_barang'] ?></td>
+  <td colspan="6" width="2%"></td>
 </tr>
 
 <?php

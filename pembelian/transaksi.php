@@ -54,6 +54,8 @@ ORDER BY nama_kelompok
   <link rel="stylesheet" href="../plugins/summernote/summernote-bs4.css">
   <!-- Google Font: Source Sans Pro -->
   <link href="https://fonts.googleapis.com/css?family=Source+Sans+Pro:300,400,400i,700" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/select2@4.0.13/dist/css/select2.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/select2-bootstrap4-theme@1.5.2/dist/select2-bootstrap4.min.css" rel="stylesheet">
 </head>
 <body class="hold-transition sidebar-mini layout-fixed">
 <div class="wrapper">
@@ -271,6 +273,7 @@ ORDER BY nama_kelompok
 <script src="../dist/js/pages/dashboard.js"></script>
 <!-- AdminLTE for demo purposes -->
 <script src="../dist/js/demo.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/select2@4.0.13/dist/js/select2.min.js"></script>
 <script>
   $('#modalDetail').on('show.bs.modal', function (e) {
     var id = $(e.relatedTarget).data('id');
@@ -279,20 +282,13 @@ ORDER BY nama_kelompok
 </script>
 <script>
   $("#kelompok").change(function(){
-
-var id = $(this).val();
-
-$("#barang").load("ajax_barang.php?id_kelompok="+id);
-
-});
-
-$("#barang").change(function(){
-
-var id = $(this).val();
-
-$("#supplier").load("ajax_supplier.php?id_barang="+id);
-
-});
+    var id = $(this).val();
+    $("#barang").load("ajax_barang.php?id_kelompok="+id);
+  });
+  $("#barang").change(function(){
+    var id = $(this).val();
+    $("#supplier").load("ajax_supplier.php?id_barang="+id);
+  });
 </script>
 </body>
 </html>

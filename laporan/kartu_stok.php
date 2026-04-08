@@ -481,13 +481,51 @@ ORDER BY s.id_supplier
 
 $qRepro = mysqli_query($conn, "
 SELECT 
-  SUM(md.jumlah) AS stok_awal
+
+CASE 
+  /* CEK ADA STOK AWAL BULAN INI */
+  WHEN SUM(
+    CASE 
+      WHEN m.jenis='AWAL'
+      AND DATE_FORMAT(m.tanggal,'%Y-%m') = '$tahun-$bulan'
+      THEN 1 ELSE 0
+    END
+  ) > 0
+
+  THEN 
+    /* PAKAI STOK AWAL */
+    SUM(
+      CASE 
+        WHEN m.jenis='AWAL'
+        AND DATE_FORMAT(m.tanggal,'%Y-%m') = '$tahun-$bulan'
+        THEN md.jumlah
+        ELSE 0
+      END
+    )
+
+  ELSE 
+    /* PAKAI SALDO SEBELUM BULAN */
+    SUM(
+      CASE 
+        WHEN m.tanggal < '$tglAwal'
+        AND m.arah='MASUK'
+        THEN md.jumlah
+
+        WHEN m.tanggal < '$tglAwal'
+        AND m.arah='KELUAR'
+        THEN -md.jumlah
+
+        ELSE 0
+      END
+    )
+
+END AS stok_awal
+
 FROM mutasi m
 JOIN mutasi_detail md ON md.id_mutasi = m.id_mutasi
 JOIN barang b ON b.id_barang = md.id_barang
-WHERE m.jenis='AWAL'
-AND b.nama_barang='Repro Briket'
-AND DATE_FORMAT(m.tanggal,'%Y-%m') = '$tahun-$bulan'
+
+WHERE b.nama_barang='Repro Briket'
 ");
 // ================================
 // UNTUK LABEL BULAN
