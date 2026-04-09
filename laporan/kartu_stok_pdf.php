@@ -631,12 +631,24 @@ ob_start();
 }
 </style>
 
+<?php
+$path = __DIR__ . '/logo.jpg';
+
+if(file_exists($path)){
+    $type = pathinfo($path, PATHINFO_EXTENSION);
+    $data = file_get_contents($path);
+    $base64 = 'data:image/' . $type . ';base64,' . base64_encode($data);
+} else {
+    $base64 = '';
+}
+?>
+
 <table border="1" width="100%" cellspacing="0" cellpadding="5">
 
 <tr>
   <!-- LOGO -->
   <td width="15%" align="center" rowspan="2">
-    <img src="file://<?= realpath(__DIR__ . '/logo.jpg') ?>" width="100">
+    <img src="<?= $base64 ?>" width="100">
   </td>
 
   <!-- NAMA PERUSAHAAN -->
@@ -790,8 +802,8 @@ $totalKeluar+=$ar['keluar'];
 $totalAkhir+=$akhir;
 ?>
 <tr class="isi-tabel">
-<td></td><td></td>
-<td><?= $no++ ?>. <?= $ar['nama_supplier'] ?></td>
+<td></td><td><?= $no++ ?>. </td>
+<td> <?= $ar['nama_supplier'] ?></td>
 <td align="right"><?= number_format($ar['stok_awal'],2) ?></td>
 <td align="right"><?= number_format($ar['masuk'],0) ?></td>
 <td align="right"><?= number_format($ar['keluar'],0) ?></td>
@@ -840,8 +852,8 @@ if($kelompokFix == 'Powder' && !$powderSudah):
         $totalAkhir += $akhir;
 ?>
 <tr class="isi-tabel">
-<td></td><td></td>
-<td><?= $no++ ?>. <?= $p['nama_supplier'] ?></td>
+<td></td><td><?= $no++ ?>. </td>
+<td><?= $p['nama_supplier'] ?></td>
 <td align="right"><?= number_format($p['stok_awal'],2) ?></td>
 <td align="right"><?= number_format($p['masuk'],0) ?></td>
 <td align="right"><?= number_format($p['keluar'],0) ?></td>
@@ -868,8 +880,8 @@ endif;
 ?>
 <tr class="isi-tabel">
 <td></td>
-<td></td>
-<td> <?= $no++ ?>. <?= $r['nama_barang'] ?></td>
+<td><?= $no++ ?>. </td>
+<td> <?= $r['nama_barang'] ?></td>
 <td align="right"><?= number_format($r['stok_awal'],2) ?></td>
 <td align="right"><?= number_format($r['masuk'],0) ?></td>
 <td align="right"><?= number_format($r['keluar'],0) ?></td>

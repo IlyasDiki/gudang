@@ -798,8 +798,8 @@ $totalKeluar+=$ar['keluar'];
 $totalAkhir+=$akhir;
 ?>
 <tr class="isi-tabel">
-<td></td><td></td>
-<td><?= $no++ ?>. <?= $ar['nama_supplier'] ?></td>
+<td></td><td><?= $no++ ?>. </td>
+<td><?= $ar['nama_supplier'] ?></td>
 <td align="right"><?= number_format($ar['stok_awal'],2) ?></td>
 <td align="right"><?= number_format($ar['masuk'],0) ?></td>
 <td align="right"><?= number_format($ar['keluar'],0) ?></td>
@@ -848,8 +848,8 @@ if($kelompokFix == 'Powder' && !$powderSudah):
         $totalAkhir += $akhir;
 ?>
 <tr class="isi-tabel">
-<td></td><td></td>
-<td><?= $no++ ?>. <?= $p['nama_supplier'] ?></td>
+<td></td><td><?= $no++ ?>. </td>
+<td><?= $p['nama_supplier'] ?></td>
 <td align="right"><?= number_format($p['stok_awal'],2) ?></td>
 <td align="right"><?= number_format($p['masuk'],0) ?></td>
 <td align="right"><?= number_format($p['keluar'],0) ?></td>
@@ -876,8 +876,8 @@ endif;
 ?>
 <tr class="isi-tabel">
 <td></td>
-<td></td>
-<td> <?= $no++ ?>. <?= $r['nama_barang'] ?></td>
+<td><?= $no++ ?>. </td>
+<td> <?= $r['nama_barang'] ?></td>
 <td align="right"><?= number_format($r['stok_awal'],2) ?></td>
 <td align="right"><?= number_format($r['masuk'],0) ?></td>
 <td align="right"><?= number_format($r['keluar'],0) ?></td>

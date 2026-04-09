@@ -277,18 +277,101 @@ ORDER BY nama_kelompok
 <script>
   $('#modalDetail').on('show.bs.modal', function (e) {
     var id = $(e.relatedTarget).data('id');
-    $('#isiDetail').load('transaksi_detail.php?id=' + id);
-  });
+
+    $('#isiDetail').load('transaksi_detail.php?id=' + id, function () {
+        initBarangData();
+        initSelect2(); // 🔥 TAMBAHKAN INI
+    });
+});
 </script>
 <script>
-  $("#kelompok").change(function(){
-    var id = $(this).val();
-    $("#barang").load("ajax_barang.php?id_kelompok="+id);
-  });
-  $("#barang").change(function(){
-    var id = $(this).val();
-    $("#supplier").load("ajax_supplier.php?id_barang="+id);
-  });
+let allBarangOptions = [];
+
+function initBarangData() {
+
+    allBarangOptions = [];
+
+    $("#barang option").each(function () {
+
+        let val = $(this).val();
+
+        if (val !== "") {
+            allBarangOptions.push({
+                id: val,
+                text: $(this).text(),
+                kelompok: $(this).attr("data-kelompok"),
+                supplier: $(this).attr("data-supplier")
+            });
+        }
+    });
+
+    console.log("ALL DATA:", allBarangOptions);
+}
+</script>
+<script>
+function initSelect2() {
+
+    // destroy kalau sudah pernah di-init
+    if ($('#barang').hasClass("select2-hidden-accessible")) {
+        $('#barang').select2('destroy');
+    }
+
+    $('#barang').select2({
+        theme: 'bootstrap4',
+        placeholder: '-- Cari Barang --',
+        width: '100%',
+        allowClear: true,
+        minimumResultsForSearch: 0 // 🔥 biar search selalu muncul
+    });
+
+}
+</script>
+<script>
+$(document).on("change", "#sub_kelompok", function () {
+
+    let kelompok = $(this).val();
+
+    let filtered = allBarangOptions.filter(item => item.kelompok == kelompok);
+
+    let barangSelect = $("#barang");
+    barangSelect.empty().append('<option value="">-- Cari Barang --</option>');
+
+    if (filtered.length === 0) {
+        $("#infoBarang").removeClass("d-none");
+    } else {
+        $("#infoBarang").addClass("d-none");
+
+        filtered.forEach(item => {
+            barangSelect.append(
+                `<option value="${item.id}" data-supplier="${item.supplier}">
+                    ${item.text}
+                </option>`
+            );
+        });
+    }
+
+    barangSelect.val(null).trigger("change");
+
+    // 🔥 WAJIB
+    initSelect2();
+
+});
+</script>
+<script>
+  $(document).on("change", "#barang", function () {
+
+    let selected = $(this).find(":selected");
+    let pakaiSupplier = selected.data("supplier");
+
+    console.log("SUPPLIER FLAG:", pakaiSupplier);
+
+    if (String(pakaiSupplier) === "1") {
+        $("#supplierBox").show();
+    } else {
+        $("#supplierBox").hide();
+    }
+
+});
 </script>
 </body>
 </html>

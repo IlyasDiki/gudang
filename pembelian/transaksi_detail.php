@@ -90,6 +90,15 @@ ORDER BY nama_kelompok
 );
 $adaSub = mysqli_num_rows($subKelompok);
 ?>
+<style>
+.select2-container--bootstrap4 .select2-selection {
+    border: 1px solid #ced4da !important;
+    border-radius: .25rem;
+    height: calc(2.25rem + 2px);
+    padding: .375rem .75rem;
+}
+</style>
+
 <div class="alert alert-info mb-3">
   <strong>Jenis Transaksi:</strong> <?= $trx["jenis_transaksi"] ?><br>
   <strong>Kelompok Barang:</strong> <?= $trx["nama_kelompok"] ?><br>
@@ -199,85 +208,4 @@ $adaSub = mysqli_num_rows($subKelompok);
   </div>
 </div>
 
-<script>
-// FILTER BARANG BERDASARKAN JENIS
-document.getElementById("sub_kelompok")?.addEventListener("change", function() {
-
-    let kelompok = this.value;
-    let barangSelect = document.getElementById("barang");
-    let info = document.getElementById("infoBarang");
-
-    let options = barangSelect.options;
-    let jumlah = 0;
-
-    for (let i = 0; i < options.length; i++) {
-        let opt = options[i];
-        let idKelompok = opt.getAttribute("data-kelompok");
-
-        if (!idKelompok) {
-            opt.hidden = false;
-            continue;
-        }
-
-        if (idKelompok == kelompok) {
-            opt.hidden = false;
-            jumlah++;
-        } else {
-            opt.hidden = true;
-        }
-    }
-
-    barangSelect.value = "";
-
-    if (jumlah == 0) {
-        info.style.display = "block";
-    } else {
-        info.style.display = "none";
-    }
-});
-
-
-// TAMPILKAN SUPPLIER JIKA DIPERLUKAN
-document.getElementById('barang').addEventListener('change', function() {
-    let supplierBox = document.getElementById('supplierBox');
-    let selected = this.options[this.selectedIndex];
-    let pakaiSupplier = selected.getAttribute("data-supplier");
-
-    if (pakaiSupplier == "1") {
-        supplierBox.style.display = "block";
-    } else {
-        supplierBox.style.display = "none";
-    }
-});
-</script>
-
-<script>
-document.getElementById("formDetail").addEventListener("submit", function(e) {
-    e.preventDefault(); // ⛔ stop reload
-
-    let form = this;
-    let formData = new FormData(form);
-
-    fetch("transaksi_detail_simpan.php", {
-        method: "POST",
-        body: formData
-    })
-    .then(res => res.json())
-    .then(data => {
-        if (data.status === "success") {
-
-            alert(data.message);
-
-            // 🔥 ambil ulang isi modal
-            $("#isiDetail").load("transaksi_detail.php?id=<?= $id ?>");
-
-        } else {
-            alert(data.message);
-        }
-    })
-    .catch(err => {
-        alert("Terjadi error!");
-        console.log(err);
-    });
-});
-</script>
+<script src="https://cdn.jsdelivr.net/npm/select2@4.0.13/dist/js/select2.min.js"></script>

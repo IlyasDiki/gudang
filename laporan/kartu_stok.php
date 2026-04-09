@@ -786,8 +786,8 @@ if($urutanKelompok != $kelompokFix){
                 echo "
                 <tr>
                     <td></td>
-                    <td></td>
-                    <td>".$no.". ".$p['nama_supplier']." - ".$p['alamat']."</td>
+                    <td>".$no.".</td>
+                    <td> ".$p['nama_supplier']." - ".$p['alamat']."</td>
                     <td class='angka'>".number_format($p['stok_awal'],2)."</td>
                     <td class='angka'>".number_format($p['masuk'],0)."</td>
                     <td class='angka'>".number_format($p['keluar'],0)."</td>
@@ -814,8 +814,8 @@ if($urutanKelompok != $kelompokFix){
             echo "
             <tr>
                 <td></td>
-                <td></td>
-                <td>".$no.". Repro Briket</td>
+                <td>".$no.".</td>
+                <td>Repro Briket</td>
                 <td class='angka'>".number_format($stokAwalRepro,2)."</td>
                 <td class='angka'>".number_format($masukRepro,0)."</td>
                 <td class='angka'>".number_format($keluarRepro,0)."</td>
@@ -924,8 +924,8 @@ if(
             echo "
             <tr>
                 <td></td>
-                <td></td>
-                <td>".$no.". ".$ar['nama_supplier']." - ".$ar['alamat']."</td>
+                <td>".$no.".</td>
+                <td>".$ar['nama_supplier']." - ".$ar['alamat']."</td>
                 <td class='angka'>".number_format($ar['stok_awal'],2)."</td>
                 <td class='angka'>".number_format($ar['masuk'],0)."</td>
                 <td class='angka'>".number_format($ar['keluar'],0)."</td>
@@ -975,8 +975,8 @@ if(
     echo "
     <tr>
         <td></td>
-        <td></td>
-        <td>".$no.". ".$r['nama_barang']."</td>
+        <td>".$no.".</td>
+        <td>".$r['nama_barang']."</td>
         <td class='angka'>".number_format($r['stok_awal'],2)."</td>
         <td class='angka'>".number_format($r['masuk'],0)."</td>
         <td class='angka'>".number_format($r['keluar'],0)."</td>
