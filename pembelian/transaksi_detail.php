@@ -195,11 +195,13 @@ $adaSub = mysqli_num_rows($subKelompok);
           <td><?= $d["nama_supplier"] ?? "-" ?></td>
           <td class="text-center"><?= number_format($d["jumlah"],2) ?></td>
           <td class="text-center">
-            <a href="transaksi_detail_hapus.php?id=<?= $d["id_detail"] ?>" 
-               class="btn btn-danger btn-sm px-3"
-               onclick="return confirm('Hapus data?')">
-              Hapus
-            </a>  
+            <button 
+                type="button" 
+                class="btn btn-danger btn-hapus" 
+                data-id="<?= $d['id_detail'] ?>"
+            >
+                Hapus
+            </button>
           </td>
         </tr>
         <?php endwhile; ?>

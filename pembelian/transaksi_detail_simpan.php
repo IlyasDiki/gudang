@@ -28,7 +28,7 @@ try {
 
   // 1) Ambil arah dari transaksi -> jenis_transaksi
   $qArah = mysqli_query($conn, "
-    SELECT jt.arah
+    SELECT jt.kode_jenis AS arah
     FROM transaksi t
     JOIN jenis_transaksi jt ON jt.id_jenist = t.jenis_transaksi
     WHERE t.id_transaksi = '$idtransaksi'
@@ -120,22 +120,17 @@ try {
 
   mysqli_commit($conn);
 
-  if (mysqli_commit($conn)) {
-      echo json_encode([
-          "status" => "success",
-          "message" => "Data berhasil ditambahkan"
-      ]);
-  } else {
-      echo json_encode([
-          "status" => "error",
-          "message" => "Gagal menyimpan data"
-      ]);
-  }
-exit;
+    echo json_encode([
+        "status" => "success",
+        "message" => "Data berhasil ditambahkan"
+    ]);
 
 } catch (Exception $e) {
 
-  mysqli_rollback($conn);
-  die("Gagal menyimpan: " . $e->getMessage());
+    mysqli_rollback($conn);
 
+    echo json_encode([
+        "status" => "error",
+        "message" => $e->getMessage()
+    ]);
 }

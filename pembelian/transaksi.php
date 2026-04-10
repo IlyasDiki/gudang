@@ -372,6 +372,88 @@ $(document).on("change", "#sub_kelompok", function () {
     }
 
 });
+
+</script>
+<script>
+$(document).on("submit", "#formDetail", function(e) {
+    e.preventDefault(); // 🔥 INI WAJIB
+
+    let formData = new FormData(this);
+    let id = $("input[name=id_transaksi]").val();
+
+    fetch("transaksi_detail_simpan.php", {
+        method: "POST",
+        body: formData
+    })
+    .then(res => res.json())
+    .then(data => {
+
+        console.log("RESPONSE:", data);
+
+        if (data.status === "success") {
+            alert(data.message);
+
+            // reload isi modal TANPA tutup modal
+            $("#isiDetail").load("transaksi_detail.php?id=" + id, function () {
+                initBarangData();
+                initSelect2();
+            });
+
+        } else {
+            alert(data.message);
+        }
+
+    })
+    .catch(err => {
+        alert("Terjadi error!");
+        console.log(err);
+    });
+});
+</script>
+
+<script>
+$(document).on("click", ".btn-hapus", function (e) {
+
+    e.preventDefault();
+
+    let id = $(this).data("id");
+
+    console.log("ID DETAIL:", id);
+
+    if (!confirm("Yakin ingin menghapus?")) return;
+
+    fetch("transaksi_detail_hapus.php", { // 🔥 FIX DI SINI
+        method: "POST",
+        headers: {
+            "Content-Type": "application/x-www-form-urlencoded"
+        },
+        body: "id=" + id
+    })
+    .then(res => res.json())
+    .then(data => {
+
+        console.log("RESPONSE:", data);
+
+        if (data.status === "success") {
+
+            let idTransaksi = $("input[name=id_transaksi]").val();
+
+            $("#isiDetail").load("transaksi_detail.php?id=" + idTransaksi, function () {
+                initBarangData();
+                initSelect2();
+            });
+
+        } else {
+            alert(data.message);
+        }
+
+    })
+    .catch(err => {
+        alert("Terjadi error!");
+        console.log(err);
+    });
+
+});
 </script>
 </body>
 </html>
