@@ -176,6 +176,15 @@ $adaSub = mysqli_num_rows($subKelompok);
 </div>
 </form>
 
+<div id="editBox" style="display:none; margin-top:10px;">
+    <input type="hidden" id="edit_id">
+    
+    <input type="number" id="edit_jumlah" class="form-control" placeholder="Jumlah">
+
+    <button id="btnSimpanEdit" class="btn btn-primary mt-2">
+        Simpan
+    </button>
+</div>
 
 <div class="card">
   <div class="card-body p-0">
@@ -193,8 +202,17 @@ $adaSub = mysqli_num_rows($subKelompok);
         <tr>
           <td><?= $d["nama_barang"] ?></td>
           <td><?= $d["nama_supplier"] ?? "-" ?></td>
-          <td class="text-center"><?= number_format($d["jumlah"],2) ?></td>
+          <td class="text-center jumlah-cell"><span class="text-jumlah"><?= number_format($d["jumlah"],2) ?></span></td>
           <td class="text-center">
+            <div style="display:flex; gap:5px; justify-content:center;">
+            <button 
+                type="button" 
+                class="btn btn-warning btn-edit" 
+                data-id="<?= $d['id_detail'] ?>" 
+                data-jumlah="<?= $d['jumlah'] ?>"
+            >
+                Edit
+            </button>
             <button 
                 type="button" 
                 class="btn btn-danger btn-hapus" 
@@ -202,6 +220,7 @@ $adaSub = mysqli_num_rows($subKelompok);
             >
                 Hapus
             </button>
+            </div>
           </td>
         </tr>
         <?php endwhile; ?>
@@ -211,3 +230,60 @@ $adaSub = mysqli_num_rows($subKelompok);
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/select2@4.0.13/dist/js/select2.min.js"></script>
+
+<script>
+$(document).on("click", ".btn-edit", function () {
+
+    let row = $(this).closest("tr");
+    let id = $(this).data("id");
+    let jumlah = $(this).data("jumlah");
+
+    // ubah jadi input
+    row.find(".jumlah-cell").html(`
+        <input type="number" class="form-control input-edit" value="${jumlah}">
+    `);
+
+    // ubah tombol
+    $(this).replaceWith(`
+        <button class="btn btn-success btn-sm btn-simpan" data-id="${id}">
+            Simpan
+        </button>
+    `);
+
+});
+</script>
+
+<script>
+$(document).on("click", ".btn-simpan", function () {
+
+    let row = $(this).closest("tr");
+    let id = $(this).data("id");
+    let jumlah = row.find(".input-edit").val();
+
+    fetch("transaksi_detail_edit.php", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/x-www-form-urlencoded"
+        },
+        body: "id=" + id + "&jumlah=" + jumlah
+    })
+    .then(res => res.json())
+    .then(data => {
+
+        if (data.status === "success") {
+
+            let idTransaksi = $("input[name=id_transaksi]").val();
+
+            $("#isiDetail").load("transaksi_detail.php?id=" + idTransaksi, function () {
+                initBarangData();
+                initSelect2();
+            });
+
+        } else {
+            alert(data.message);
+        }
+
+    });
+
+});
+</script>

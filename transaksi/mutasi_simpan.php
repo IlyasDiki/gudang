@@ -1,16 +1,28 @@
 <?php
 require '../config/init.php';
 
-$tanggal    = $_POST['tanggal'];
-$id_transaksi  = $_POST['id_transaksi'];
-$kode_jenis = $_POST['kode_jenis'];
-$user       = $_SESSION['id_pengguna'];
+$tanggal    = $_POST['tanggal'] ?? null;
+$kode_jenis = $_POST['kode_jenis'] ?? null;
+$id_barang  = $_POST['id_barang'] ?? null;
+$idSupplier = $_POST['id_supplier'] ?? null;
+$jumlah     = $_POST['jumlah'] ?? 0;
+$user       = $_SESSION['id_pengguna'] ?? null;
+
+// 🔥 karena ini KOREKSI → tidak ada transaksi
+$idTransaksi = "NULL";
+
+if (!$tanggal) die("Tanggal wajib diisi");
+if (!$kode_jenis) die("Jenis mutasi belum dipilih");
+if (!$id_barang) die("Barang belum dipilih");
+if (!$jumlah) die("Jumlah belum diisi");
 
 mysqli_begin_transaction($conn);
 
 try {
 
-  // ambil jenis
+  // =========================
+  // AMBIL JENIS MUTASI
+  // =========================
   $q = mysqli_query($conn,
     "SELECT id_jenis, tipe FROM jenis_mutasi WHERE kode_jenis='$kode_jenis'"
   );
@@ -20,46 +32,63 @@ try {
     throw new Exception('Jenis mutasi tidak valid');
   }
 
-  // header mutasi
+  $idJenis = $jenis['id_jenis'];
+
+  // =========================
+  // TENTUKAN ARAH
+  // =========================
+  $arah = ($jumlah > 0) ? "MASUK" : "KELUAR";
+  $jumlah = abs($jumlah);
+
+  // =========================
+  // INSERT HEADER MUTASI
+  // =========================
   mysqli_query($conn, "
-    INSERT INTO mutasi (tanggal, id_transaksi, id_jenis, dibuat_oleh)
-    VALUES ('$tanggal', '$id_transaksi', '{$jenis['id_jenis']}', '$user')
+    INSERT INTO mutasi (
+        id_transaksi,
+        tanggal,
+        id_jenis,
+        arah,
+        keterangan,
+        dibuat_oleh,
+        dibuat_pada,
+        id_supplier
+    )
+    VALUES (
+        $idTransaksi,
+        '$tanggal',
+        '$idJenis',
+        '$arah',
+        'Koreksi Stok',
+        '$user',
+        NOW(),
+        ".($idSupplier ? "'$idSupplier'" : "NULL")."
+    )
   ");
 
   $id_mutasi = mysqli_insert_id($conn);
-  $qStok = mysqli_query($conn, "
-    SELECT 
-      COALESCE(SUM(CASE WHEN m.arah='MASUK' THEN md.jumlah ELSE 0 END),0) -
-      COALESCE(SUM(CASE WHEN m.arah='KELUAR' THEN md.jumlah ELSE 0 END),0) AS stok
-    FROM mutasi_detail md
-    JOIN mutasi m ON m.id_mutasi = md.id_mutasi
-    WHERE md.id_barang = '$id_barang'
+
+  // =========================
+  // INSERT DETAIL
+  // =========================
+  mysqli_query($conn, "
+    INSERT INTO mutasi_detail (
+        id_mutasi,
+        id_barang,
+        jumlah,
+        id_supplier
+    )
+    VALUES (
+        '$id_mutasi',
+        '$id_barang',
+        '$jumlah',
+        ".($idSupplier ? "'$idSupplier'" : "NULL")."
+    )
   ");
-  $stok_sistem = mysqli_fetch_assoc($qStok)['stok'] ?? 0;
 
-  $selisih = $stok_fisik - $stok_sistem;
-
-  if ($selisih == 0) {
-    die("Tidak ada koreksi karena stok fisik sama dengan stok sistem.");
-  }
-
-  $arah = ($selisih > 0) ? "MASUK" : "KELUAR";
-  $jumlah = abs($selisih);
-  // ===============================
-  // PEMBELIAN / KOREKSI
-  // ===============================
-  if (in_array($jenis['tipe'], ['PEMBELIAN', 'KOREKSI'])) {
-    $jumlah = $_POST['jumlah'] ?? 0;
-
-    mysqli_query($conn, "
-      INSERT INTO mutasi_detail (id_mutasi, jumlah)
-      VALUES ('$id_mutasi', '$jumlah')
-    ");
-  }
-
-  // ===============================
-  // PEMAKAIAN AT
-  // ===============================
+  // =========================
+  // OPTIONAL: AT
+  // =========================
   if ($jenis['tipe'] == 'AT') {
     mysqli_query($conn, "
       INSERT INTO at_detail
@@ -76,9 +105,9 @@ try {
     ");
   }
 
-  // ===============================
-  // PRODUKSI
-  // ===============================
+  // =========================
+  // OPTIONAL: PRODUKSI
+  // =========================
   if ($jenis['tipe'] == 'PRODUKSI') {
     mysqli_query($conn, "
       INSERT INTO produksi_detail (id_mutasi, mixer)
@@ -87,9 +116,13 @@ try {
   }
 
   mysqli_commit($conn);
+
   header("Location: mutasi.php?success=1");
+  exit;
 
 } catch (Exception $e) {
+
   mysqli_rollback($conn);
-  die($e->getMessage());
+  die("Gagal menyimpan: " . $e->getMessage());
+
 }
