@@ -112,7 +112,6 @@ include "../layout/sidebar.php";
 value="<?= $b['id_barang'] ?>"
 data-supplier="<?= $b['pakai_supplier'] ?>"
 >
-
 <?= $b['nama_kelompok'] ?> - <?= htmlspecialchars($b['nama_barang']) ?>
 
 </option>

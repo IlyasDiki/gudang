@@ -5,21 +5,26 @@ if (!isset($_GET['id_barang'])) {
   die('ID barang tidak ditemukan');
 }
 
+$id_supplier = $_GET['id_supplier'] ?? '';
 $id_barang = $_GET['id_barang'];
 $bulan = $_GET['bulan'] ?? date('m');
 $tahun = $_GET['tahun'] ?? date('Y');
 
+$idSupplierFilter = $id_supplier ? "AND md.id_supplier='$id_supplier'" : "";
+$idSupplierFilterTrans = $id_supplier ? "AND td.id_supplier='$id_supplier'" : "";
+
 $q = mysqli_query($conn, "
 (
   SELECT 
-    m.tanggal AS tanggal,
+    m.tanggal,
     jm.nama_jenis AS uraian,
-    m.arah AS arah,
-    md.jumlah AS jumlah
+    m.arah,
+    md.jumlah
   FROM mutasi_detail md
   JOIN mutasi m ON m.id_mutasi = md.id_mutasi
   JOIN jenis_mutasi jm ON jm.id_jenis = m.id_jenis
   WHERE md.id_barang='$id_barang'
+  $idSupplierFilter
   AND MONTH(m.tanggal)='$bulan'
   AND YEAR(m.tanggal)='$tahun'
 )
@@ -34,6 +39,7 @@ UNION ALL
   JOIN transaksi t ON t.id_transaksi = td.id_transaksi
   JOIN jenis_transaksi jt ON jt.id_jenist = t.jenis_transaksi
   WHERE td.id_barang='$id_barang'
+  $idSupplierFilterTrans
   AND MONTH(t.tanggal_terima)='$bulan'
   AND YEAR(t.tanggal_terima)='$tahun'
 )
@@ -121,15 +127,12 @@ $namaKelompok = $barangInfo['nama_kelompok'] ?? '';
 <body class="hold-transition sidebar-mini layout-fixed">
 <div class="wrapper">
 
-    <?php
-    $page = 'kartustok';
-    include "../layout/navbar.php";
-    include "../layout/sidebar.php";
-    ?>  
 
   <!-- Content -->
   <div class="content-wrapper p-3">
-
+<a href="barang.php" class="btn btn-secondary mb-2">
+  ← Kembali
+</a>
     <section class="content-header">
       <h1>Kartu Stok</h1>
       <p class="text-muted mb-0">
@@ -151,6 +154,25 @@ $namaKelompok = $barangInfo['nama_kelompok'] ?? '';
 
   <form method="get" class="form-inline mb-3">
     <input type="hidden" name="id_barang" value="<?= $id_barang ?>">
+
+    <select name="id_supplier" class="form-control mr-2">
+      <option value="">-- Semua Supplier --</option>
+      <?php 
+      $qSup = mysqli_query($conn, "
+        SELECT DISTINCT s.id_supplier, s.nama_supplier
+        FROM mutasi_detail md
+        JOIN mutasi m ON m.id_mutasi = md.id_mutasi
+        JOIN supplier s ON s.id_supplier = md.id_supplier
+        WHERE md.id_barang='$id_barang'
+      ");
+      while($s=mysqli_fetch_assoc($qSup)):
+      ?>
+        <option value="<?= $s['id_supplier'] ?>"
+          <?= $id_supplier==$s['id_supplier']?'selected':'' ?>>
+          <?= $s['nama_supplier'] ?>
+        </option>
+      <?php endwhile ?>
+    </select>
 
     <select name="bulan" class="form-control mr-2">
       <?php for($b=1;$b<=12;$b++): ?>

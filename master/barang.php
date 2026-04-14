@@ -1,7 +1,7 @@
 <?php
 require_once __DIR__ . '/../config/init.php';
 $supplier = mysqli_query($conn, "SELECT * FROM supplier");
-
+$id_kelompok = $_GET['id_kelompok'] ?? '';
 // Sorting logic
 $sort = isset($_GET['sort']) ? $_GET['sort'] : 'id';
 $order = isset($_GET['order']) && $_GET['order'] == 'desc' ? 'DESC' : 'ASC';
@@ -14,12 +14,43 @@ if ($sort == 'kode') {
 } elseif ($sort == 'kelompok') {
     $order_by = "k.nama_kelompok $order";
 }
+$search = $_GET['search'] ?? '';
+$where = [];
 
-$sql = "SELECT b.*, k.nama_kelompok 
-        FROM barang b
-        LEFT JOIN kelompok_barang k 
+if (!empty($id_kelompok)) {
+    $id_kelompok_safe = mysqli_real_escape_string($conn, $id_kelompok);
+    $where[] = "b.id_kelompok = '$id_kelompok_safe'";
+}
+
+if (!empty($search)) {
+    $search_safe = mysqli_real_escape_string($conn, $search);
+    $where[] = "(
+        b.nama_barang LIKE '%$search_safe%' 
+        OR b.kode_barang LIKE '%$search_safe%'
+    )";
+}
+
+$where_sql = "";
+if (!empty($where)) {
+    $where_sql = "WHERE " . implode(" AND ", $where);
+}
+
+if (!empty($search)) {
+    $search_safe = mysqli_real_escape_string($conn, $search);
+    $where = "WHERE 
+        b.nama_barang LIKE '%$search_safe%' 
+        OR b.kode_barang LIKE '%$search_safe%'
+        OR k.nama_kelompok LIKE '%$search_safe%'";
+}
+
+$sql = "
+    SELECT b.*, k.nama_kelompok 
+    FROM barang b
+    LEFT JOIN kelompok_barang k 
         ON b.id_kelompok = k.id_kelompok
-        ORDER BY $order_by";
+    $where_sql
+    ORDER BY $order_by
+";
 
 $barang = mysqli_query($conn, $sql);
 
@@ -29,10 +60,27 @@ $kelompok = mysqli_query($conn, "SELECT * FROM kelompok_barang");
 function getSortLink($column, $current_sort, $current_order) {
     $new_order = ($current_sort == $column && $current_order == 'ASC') ? 'desc' : 'asc';
     $icon = 'fa-sort';
+
     if ($current_sort == $column) {
         $icon = $current_order == 'ASC' ? 'fa-sort-up' : 'fa-sort-down';
     }
-    return "<a href=\"?sort=$column&order=$new_order\" class=\"sort-link\" style=\"text-decoration: none; color: inherit;\"><i class=\"fa $icon\"></i></a>";
+
+    $search = $_GET['search'] ?? '';
+    $id_kelompok = $_GET['id_kelompok'] ?? '';
+
+    $params = "sort=$column&order=$new_order";
+
+    if ($search) {
+        $params .= "&search=" . urlencode($search);
+    }
+
+    if ($id_kelompok) {
+        $params .= "&id_kelompok=" . urlencode($id_kelompok);
+    }
+
+    return "<a href=\"?$params\" class=\"sort-link\" style=\"text-decoration: none; color: inherit;\">
+            <i class=\"fa $icon\"></i>
+            </a>";
 }
 ?>
 <!DOCTYPE html>
@@ -90,6 +138,36 @@ function getSortLink($column, $current_sort, $current_order) {
     </button>
   </div>
   <div class="card-body">
+<form method="get" class="form-inline mb-3">
+
+  <!-- FILTER KELOMPOK -->
+  <select name="id_kelompok" class="form-control mr-2">
+    <option value="">-- Semua Kelompok --</option>
+    <?php while($k=mysqli_fetch_assoc($kelompok)): ?>
+      <option value="<?= $k['id_kelompok'] ?>"
+        <?= $id_kelompok==$k['id_kelompok']?'selected':'' ?>>
+        <?= $k['nama_kelompok'] ?>
+      </option>
+    <?php endwhile ?>
+  </select>
+
+  <!-- SEARCH -->
+  <input 
+    type="text" 
+    name="search" 
+    class="form-control mr-2" 
+    placeholder="Cari barang..." 
+    value="<?= htmlspecialchars($search) ?>"
+  >
+
+  <!-- SIMPAN SORT -->
+  <input type="hidden" name="sort" value="<?= $sort ?>">
+  <input type="hidden" name="order" value="<?= strtolower($order) ?>">
+
+  <button class="btn btn-primary">Tampilkan</button>
+  <a href="barang.php" class="btn btn-secondary ml-2">Reset</a>
+
+</form>
   <table class="table table-bordered table-striped">
     <thead>
       <tr>
