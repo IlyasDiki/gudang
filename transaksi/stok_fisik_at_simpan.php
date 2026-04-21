@@ -7,12 +7,12 @@ mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
 ========================= */
 if(isset($_POST['simpan'])){
     $tanggal     = isset($_POST['tanggal']) ? $_POST['tanggal'] : '';
-    $id_barang   = isset($_POST['id_barang']) ? (int) $_POST['id_barang'] : 0;
+    $id_supplier   = isset($_POST['id_supplier']) ? (int) $_POST['id_supplier'] : 0;
     $jumlah   = isset($_POST['jumlah']) ? str_replace(',', '.', $_POST['jumlah']) : '';
     $keterangan  = isset($_POST['keterangan']) ? $_POST['keterangan'] : '';
 
     // Basic validation
-    if(empty($tanggal) || $id_barang <= 0 || $jumlah === ''){
+    if(empty($tanggal) || $id_supplier <= 0 || $jumlah === ''){
         echo "<script>alert('Mohon isi semua field yang diperlukan'); window.history.back();</script>";
         exit;
     }
@@ -21,13 +21,13 @@ if(isset($_POST['simpan'])){
     $jumlah = (float) $jumlah;
 
     // Use prepared statement to avoid injection
-    $stmt = mysqli_prepare($conn, "INSERT INTO stok_fisik_at (tanggal, id_barang, jumlah, keterangan) VALUES (?, ?, ?, ?)");
+    $stmt = mysqli_prepare($conn, "INSERT INTO stok_fisik_at (tanggal, id_supplier, jumlah, keterangan) VALUES (?, ?, ?, ?)");
     if(!$stmt){
         echo "Prepare failed: ".mysqli_error($conn);
         exit;
     }
 
-    mysqli_stmt_bind_param($stmt, 'sids', $tanggal, $id_barang, $jumlah, $keterangan);
+    mysqli_stmt_bind_param($stmt, 'sids', $tanggal, $id_supplier, $jumlah, $keterangan);
     $exec = mysqli_stmt_execute($stmt);
 
     if($exec){

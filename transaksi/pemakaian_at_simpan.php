@@ -8,6 +8,7 @@ mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
 $tanggal     = $_POST['tanggal'] ?? null;
 $idBarang    = $_POST['id_barang'] ?? null;
 $idSupplier  = $_POST['id_supplier'] ?? null;
+$idDetail    = $_POST['id_mutasi_detail'] ?? null;
 
 $sortir    = floatval($_POST['sortir'] ?? 0);
 $ma        = floatval($_POST['ma'] ?? 0);
@@ -21,32 +22,51 @@ $user = $_SESSION['id_pengguna'] ?? null;
 // =======================
 // VALIDASI
 // =======================
-if (empty($tanggal) || empty($idBarang) || empty($idSupplier)) {
-  die('Tanggal, barang, atau supplier belum diisi');
+if (empty($tanggal) || empty($idBarang) || empty($idSupplier) || empty($idDetail)) {
+    die('Data tidak lengkap');
 }
 
-if (!isset($_SESSION['id_pengguna'])) {
-  die('User belum login');
+$totalPakai = $sortir + $ma + $aa + $bMentah + $air + $atp;
+
+if ($totalPakai <= 0) {
+    die('Tidak ada pemakaian');
 }
 
-
 // =======================
-// JENIS MUTASI AT
+// CEK SISA STOK BATCH
 // =======================
-$qJenis = mysqli_query($conn,"
-SELECT id_jenis
-FROM jenis_mutasi
-WHERE kode_jenis='AT'
+$qCek = mysqli_query($conn, "
+SELECT 
+    md.jumlah,
+    (
+        md.jumlah -
+        IFNULL((
+            SELECT SUM(sortir+ma+aa+b_mentah+air+atp)
+            FROM at_detail
+            WHERE id_mutasi_detail = md.id_detail
+        ),0)
+    ) AS sisa
+FROM mutasi_detail md
+WHERE md.id_detail = '$idDetail'
 ");
 
-$jenis = mysqli_fetch_assoc($qJenis);
+$data = mysqli_fetch_assoc($qCek);
 
-if (!$jenis) {
-  die('Jenis mutasi AT belum dibuat');
+if (!$data) {
+    die('Batch tidak ditemukan');
 }
 
-$idJenis = $jenis['id_jenis'];
+if ($totalPakai > $data['sisa']) {
+    die('❌ Stok batch tidak cukup! Sisa: ' . $data['sisa']);
+}
 
+// =======================
+// JENIS MUTASI
+// =======================
+$qJenis = mysqli_query($conn,"
+SELECT id_jenis FROM jenis_mutasi WHERE kode_jenis='AT'
+");
+$idJenis = mysqli_fetch_assoc($qJenis)['id_jenis'];
 
 // =======================
 // TRANSAKSI
@@ -55,65 +75,51 @@ mysqli_begin_transaction($conn);
 
 try {
 
-  // 1️⃣ HEADER MUTASI
-  mysqli_query($conn,"
-  INSERT INTO mutasi
-  (tanggal, id_jenis, keterangan, dibuat_oleh, id_supplier)
-  VALUES
-  (
-    '$tanggal',
-    '$idJenis', 
-    'Pemakaian AT',
-    '$user', 
-    '$idSupplier'
-  )
-  ");
+    // HEADER
+    mysqli_query($conn,"
+    INSERT INTO mutasi
+    (tanggal, id_jenis, keterangan, dibuat_oleh, id_supplier)
+    VALUES
+    ('$tanggal','$idJenis','Pemakaian AT','$user','$idSupplier')
+    ");
 
-  $idMutasi = mysqli_insert_id($conn);
+    // DETAIL (TANPA FIFO)
+    mysqli_query($conn,"
+    INSERT INTO at_detail
+    (
+        id_mutasi_detail,
+        id_barang,
+        id_supplier,
+        sortir,
+        ma,
+        aa,
+        b_mentah,
+        air,
+        atp,
+        tanggal
+    )
+    VALUES
+    (
+        '$idDetail',
+        '$idBarang',
+        '$idSupplier',
+        '$sortir',
+        '$ma',
+        '$aa',
+        '$bMentah',
+        '$air',
+        '$atp',
+        '$tanggal'
+    )
+    ");
 
+    mysqli_commit($conn);
 
-  // 2️⃣ DETAIL PEMAKAIAN AT
-  mysqli_query($conn,"
-  INSERT INTO at_detail
-  (
-    id_mutasi,
-    id_barang,
-    id_supplier,
-    sortir,
-    ma,
-    aa,
-    b_mentah,
-    air,
-    atp,
-    tanggal
-  )
-  VALUES
-  (
-    '$idMutasi',
-    '$idBarang',
-    '$idSupplier',
-    '$sortir',
-    '$ma',
-    '$aa',
-    '$bMentah',
-    '$air',
-    '$atp',
-    '$tanggal'
-  )
-  ");
+    header("Location: pemakaian_at.php?success=1");
+    exit;
 
+} catch (Exception $e) {
 
-  mysqli_commit($conn);
-
-  header("Location: pemakaian_at.php?success=1");
-  exit;
-
-}
-
-catch (Exception $e) {
-
-  mysqli_rollback($conn);
-
-  die('Gagal simpan pemakaian AT: '.$e->getMessage());
-
+    mysqli_rollback($conn);
+    die("Gagal simpan: " . $e->getMessage());
 }

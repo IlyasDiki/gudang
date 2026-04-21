@@ -17,50 +17,42 @@ $id_barang = (int)$id_barang;
 /* =========================
    AMBIL STOK MASUK AT
    ========================= */
-// build base query and optionally filter by specific barang
 $sql = "
 SELECT 
-    b.id_barang,
-    b.nama_barang,
-    m.tanggal,
-    md.jumlah AS stok_asalan,
+    d.id_supplier,
+    s.nama_supplier,
 
+    MAX(d.tanggal) as tanggal_terakhir,
+
+    /* stok awal dari mutasi */
+    MAX(md.jumlah) as stok_awal,
+
+    /* sisa arang */
+    (MAX(md.jumlah) - SUM(d.sortir)) as sisa_at,
+
+    /* sisa powder */
     (
-        md.jumlah
-
+        SUM(d.atp)
         -
-
-        IFNULL((
-            SELECT SUM(ad.atp)
-            FROM at_detail ad
-            WHERE ad.id_barang = b.id_barang
-            AND ad.tanggal <= m.tanggal
-        ),0)
-
-        -
-
         IFNULL((
             SELECT SUM(pd.mixer)
             FROM produksi_detail pd
-            JOIN mutasi m2 ON m2.id_mutasi = pd.id_produksi
-            WHERE pd.id_barang_atp = b.id_barang
-            AND m2.tanggal <= m.tanggal
+            WHERE pd.id_mutasi_detail = d.id_mutasi_detail
         ),0)
+    ) as sisa_produksi
 
-    ) AS sisa_powder
+FROM at_detail d
+JOIN mutasi_detail md ON md.id_detail = d.id_mutasi_detail
+LEFT JOIN supplier s ON s.id_supplier = d.id_supplier
 
-FROM mutasi_detail md
-JOIN mutasi m ON m.id_mutasi = md.id_mutasi
-JOIN barang b ON b.id_barang = md.id_barang
-JOIN kelompok_barang kb ON kb.id_kelompok = b.id_kelompok
+WHERE d.tanggal <= '$tglAkhir'
 
-WHERE m.id_jenis = 5
-AND kb.nama_kelompok = 'Powder'
+GROUP BY d.id_mutasi_detail
+
+HAVING sisa_at > 0 OR sisa_produksi > 0
+
+ORDER BY tanggal_terakhir DESC
 ";
-if($id_barang > 0){
-    $sql .= "\nAND b.id_barang = '$id_barang'\n";
-}
-$sql .= "\nORDER BY b.nama_barang, m.tanggal ASC\n";
 
 $result = $conn->query($sql);
 
@@ -95,12 +87,20 @@ $totalFisik = $dataFisik['total_fisik'];
 
 // prepare for detail listing (include barang name for supplier column)
 $qFisikRows = mysqli_query($conn, "
-SELECT s.tanggal, s.jumlah, s.keterangan, b.nama_barang
+SELECT 
+    s.tanggal, 
+    s.jumlah, 
+    s.keterangan, 
+    sp.nama_supplier
 FROM stok_fisik_at s
-LEFT JOIN barang b ON b.id_barang = s.id_barang
-WHERE s.tanggal BETWEEN '$tglAwal' AND '$tglAkhir'" . $whereBarang . "
+LEFT JOIN supplier sp ON sp.id_supplier = s.id_supplier
+WHERE s.tanggal BETWEEN '$tglAwal' AND '$tglAkhir'
 ORDER BY s.tanggal ASC
 ");
+
+if(!$qFisikRows){
+    die("Query error: " . mysqli_error($conn));
+}
 
 // grandTotalSaldo will be computed after iterating $result rows below
 $grandTotalSaldo = 0;
@@ -154,10 +154,15 @@ table{
     width:100%;
     border-collapse:collapse;
 }
-th,td{
+th{
     border:1px solid #000;
     padding:6px;
     text-align:center;
+}
+td{
+  border:1px solid #000;
+  padding:6px;
+    text-align:left;
 }
 .header-top{
     font-weight:bold;
@@ -216,9 +221,9 @@ tfoot {
 </div>
 
 <h4 class="mb-1"><b>Ringkasan Pemakaian AT</b></h4>
-<small class="text-muted">
-  Periode: <b><?= $namaBulan[$bulan] . ' ' . $tahun ?></b>
-</small>
+<p class="text-muted">
+  PER: <b><?= $namaBulan[$bulan] . ' ' . $tahun ?></b>
+</p>
 
 <hr>
 
@@ -272,20 +277,25 @@ tfoot {
 <table>
 
 <tr>
-    <td colspan="6" class="judul">
+    <th colspan="8" class="judul">
         <b>BAHAN BAKU AT</b>
-    </td>
+    </th>
 </tr>
 
 <tr>
     <th>NO</th>
     <th>SUPPLIER</th>
     <th>TGL TERIMA</th>
-    <th>STOK (ASALAN)</th>
-    <th>SISA POWDER</th>
+    <th colspan="2">STOK (ASALAN)</th>
+    <th colspan="2">SISA POWDER</th>
     <th>KET</th>
 </tr>
 
+<tr>
+    <th colspan="8">
+        <b>STOK AT READY</b>
+    </th>
+</tr>
 <?php
 $no = 1;
 
@@ -294,8 +304,8 @@ $total_sisa = 0;
 
 while($row = $result->fetch_assoc()) {
 
-    $stok = (int)$row['stok_asalan'];
-    $sisa = (int)$row['sisa_powder'];
+    $stok = (int)$row['stok_awal']; // ⬅️ dari query
+    $sisa = (int)$row['sisa_produksi'];
 
     $total_stok += $stok;
     $total_sisa += $sisa;
@@ -304,15 +314,17 @@ while($row = $result->fetch_assoc()) {
     $grandTotalSaldo += $sisa;
 
     // KETERANGAN
-    $ket = ($sisa <= 0) ? "HABIS" : "READY";
+   //$ket = ($sisa <= 0) ? "HABIS" : "READY";
 
     echo "<tr>";
     echo "<td>".$no++."</td>";
-    echo "<td>".$row['nama_barang']."</td>";
-    echo "<td>".$row['tanggal']."</td>";
-    echo "<td align='right'>".number_format($row['stok_asalan'],0)."</td>";
-    echo "<td align='right'>".number_format($row['sisa_powder'],0)."</td>";
-    echo "<td align='center'>".$ket."</td>";
+    echo "<td>".htmlspecialchars($row['nama_supplier'] ?? '-')."</td>";
+    echo "<td>".date('j-M-Y', strtotime($row['tanggal_terakhir']))."</td>";
+    echo "<td align='right'>".number_format($row['sisa_at'],0)."</td>";
+    echo "<td align='right' width='1%'>Kg</td>";
+    echo "<td align='right'>".number_format($row['sisa_produksi'],0)."</td>";
+    echo "<td align='right' width='1%'>Kg</td>";
+    echo "<td align='center'></td>";
     echo "</tr>";
 }
 // now that grandTotalSaldo is available, calculate totalAkhir
@@ -320,16 +332,18 @@ $totalAkhir = $grandTotalSaldo - $totalFisik;
 ?>
 
 <tr style="font-weight:bold; background:#f0f0f0;">
-    <td colspan="3" align="center">JUMLAH</td>
+    <th colspan="3" align="center">JUMLAH</th>
     <td align="right"><?php echo number_format($total_stok,0); ?></td>
+    <td>Kg</td>
     <td align="right"><?php echo number_format($total_sisa,0); ?></td>
+    <td>Kg</td>
     <td></td>
 </tr>
 
 <?php
 echo "
-<tr style='background:#d9e1c3; font-weight:bold;'>
-    <td colspan='6' class='judul'><b>STOK AT FISIK HABIS</b></td>
+<tr style='font-weight:bold;'>
+    <th colspan='8'><b>STOK AT FISIK HABIS</b></th>
 </tr>";
 
 // list actual fisik entries
@@ -338,60 +352,66 @@ if($qFisikRows && mysqli_num_rows($qFisikRows) > 0){
     while($f = mysqli_fetch_assoc($qFisikRows)){
         echo "<tr>";
         echo "<td>".$noF++."</td>";
-        // supplier column: use barang name from stok_fisik_at
-        echo "<td>".htmlspecialchars($f['nama_barang'] ?? '-')."</td>";
-        echo "<td>".$f['tanggal']."</td>";
-        echo "<td >-</td>";
+        echo "<td>".htmlspecialchars($f['nama_supplier'] ?? '-')."</td>";
+        echo "<td>".date('j-M-Y', strtotime($f['tanggal']))."</td>";
         echo "<td align='right'>".number_format($f['jumlah'],0)."</td>";
+        echo "<td align='right' width='1%'>Kg</td>";
+        echo "<td></td>";
+        echo "<td align='right' width='1%'>Kg</td>";
         echo "<td>".htmlspecialchars($f['keterangan'])."</td>";
         echo "</tr>";
     }
-    // subtotal for fisik
+
     echo "<tr style='font-weight:bold; background:#f0f0f0;'>
-            <td colspan='3' align='center'>JUMLAH</td>
-            <td></td>
+            <th colspan='3' align='center'>JUMLAH</th>
             <td align='right'>".number_format($totalFisik,0)."</td>
+            <td width='1%'>Kg</td>
+            <td></td>
+            <td width='1%'>Kg</td>
             <td></td>
           </tr>";
 } else {
-    echo "<tr><td colspan='6' class='text-center'>Belum ada stok fisik pada periode ini</td></tr>";
+    echo "<tr><td colspan='8' class='text-center'>Belum ada stok fisik pada periode ini</td></tr>";
 }
+
+/* =========================
+   TOTAL GLOBAL
+========================= */
+$totalGlobalStok = $total_stok + $totalFisik;
+$totalGlobalSisa = $total_sisa;
+
+echo "<tr style='background:#d9d9d9; font-weight:bold;'>
+    <th colspan='3'><b>TOTAL</b></th>
+    <td><b>".number_format($totalGlobalStok,0)."</b></td>
+    <td width='1%'>Kg</td>
+    <td><b>".number_format($totalGlobalSisa,0)."</b></td>
+    <td width='1%'>Kg</td>
+    <td></td>
+</tr>";
 
 // render tambahan section (still inside PHP)
 echo "
 <tr style='background:#cfd8dc; font-weight:bold;'>
-    <td colspan='6' class='judul'><b>TAMBAHAN</b></td>
+    <td colspan='8' class='judul'><b>TAMBAHAN</b></td>
 </tr>";
 
 // heading row for tambahan entries
-echo "
-<tr>
-    <th>No</th>
-    <th colspan='3'>Nama Barang</th>
-    <th>Jumlah</th>
-    <th>Keterangan</th>
-</tr>";
 
 if($resultAdj && $resultAdj->num_rows > 0){
     $noT = 1;
     while($t = $resultAdj->fetch_assoc()){
         echo "<tr>";
         echo "<td>" . $noT++ . "</td>";
-        echo "<td colspan='3'>" . htmlspecialchars($t['nama_barang'] ?? '-') . "</td>";
+        echo "<td colspan='4'>" . htmlspecialchars($t['nama_barang'] ?? '-') . "</td>";
         echo "<td align='right'>" . number_format((float)$t['jumlah'],0) . "</td>";
+        echo "<td align='right' width='1%'>Kg</td>";
         echo "<td>" . htmlspecialchars($t['keterangan']) . "</td>";
         echo "</tr>";
     }
 } else {
-    echo "<tr><td colspan='6' class='text-center'>Belum ada data tambahan pada periode ini</td></tr>";
+    echo "<tr><td colspan='8' class='text-center'>Belum ada data tambahan pada periode ini</td></tr>";
 }
 ?>
-
-<?php if(isset($totalAkhir)): ?>
-<div class="mt-3">
-    <strong>Saldo akhir setelah fisik: <?= number_format($totalAkhir,0) ?></strong>
-</div>
-<?php endif; ?>
 
 </table>
 

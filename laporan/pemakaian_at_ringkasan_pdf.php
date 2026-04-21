@@ -3,99 +3,250 @@ require '../config/init.php';
 require_once "../dompdf/autoload.inc.php";
 
 use Dompdf\Dompdf;
+use Dompdf\Options;
 
+
+/* =========================
+   PARAMETER
+========================= */
 $bulan = $_GET['bulan'] ?? date('m');
 $tahun = $_GET['tahun'] ?? date('Y');
 
-$sql = "SELECT 
-    b.nama_barang,
-    m.tanggal,
-    md.jumlah AS stok_asalan,
+$tglAwal  = $tahun.'-'.$bulan.'-01';
+$tglAkhir = date('Y-m-t', strtotime($tglAwal));
 
+/* =========================
+   QUERY AT READY (SAMA EXCEL)
+========================= */
+$sql = "
+SELECT 
+    d.id_supplier,
+    s.nama_supplier,
+    MAX(d.tanggal) as tanggal_terakhir,
+    MAX(md.jumlah) as stok_awal,
+    (MAX(md.jumlah) - SUM(d.sortir)) as sisa_at,
     (
-        md.jumlah
-        -
-        IFNULL((
-            SELECT SUM(ad.atp)
-            FROM at_detail ad
-            WHERE ad.id_barang = b.id_barang
-            AND ad.tanggal <= m.tanggal
-        ),0)
-        -
-        IFNULL((
+        SUM(d.atp)
+        - IFNULL((
             SELECT SUM(pd.mixer)
             FROM produksi_detail pd
-            JOIN mutasi m2 ON m2.id_mutasi = pd.id_produksi
-            WHERE pd.id_barang_atp = b.id_barang
-            AND m2.tanggal <= m.tanggal
+            WHERE pd.id_mutasi_detail = d.id_mutasi_detail
         ),0)
-    ) AS sisa_powder
+    ) as sisa_produksi
 
-FROM mutasi_detail md
-JOIN mutasi m ON m.id_mutasi = md.id_mutasi
-JOIN barang b ON b.id_barang = md.id_barang
-JOIN kelompok_barang kb ON kb.id_kelompok = b.id_kelompok
+FROM at_detail d
+JOIN mutasi_detail md ON md.id_detail = d.id_mutasi_detail
+LEFT JOIN supplier s ON s.id_supplier = d.id_supplier
 
-WHERE m.id_jenis = 5
-AND kb.nama_kelompok = 'Powder'
-ORDER BY b.nama_barang, m.tanggal ASC";
+WHERE d.tanggal <= '$tglAkhir'
+
+GROUP BY d.id_mutasi_detail
+HAVING sisa_at > 0 OR sisa_produksi > 0
+ORDER BY tanggal_terakhir DESC
+";
 
 $result = $conn->query($sql);
 
-$html = "<h3>Ringkasan Bahan Baku AT</h3>";
-$html .= "<table border='1' width='100%' cellpadding='5' cellspacing='0'>";
-$html .= "<tr>
-    <td colspan='6' class='judul'>
-        <b>BAHAN BAKU AT</b>
-    </td>
-</tr>";
-$html .= "<tr>
-<th>NO</th>
-<th>SUPPLIER</th>
-<th>TGL TERIMA</th>
-<th>STOK</th>
-<th>SISA</th>
-<th>KET</th>
-</tr>";
+/* =========================
+   STOK FISIK
+========================= */
+$qFisikRows = mysqli_query($conn, "
+SELECT 
+    s.tanggal, 
+    s.jumlah, 
+    s.keterangan, 
+    sp.nama_supplier
+FROM stok_fisik_at s
+LEFT JOIN supplier sp ON sp.id_supplier = s.id_supplier
+WHERE s.tanggal BETWEEN '$tglAwal' AND '$tglAkhir'
+ORDER BY s.tanggal ASC
+");
 
-$no = 1;
+$qFisikSum = mysqli_query($conn, "
+SELECT COALESCE(SUM(jumlah),0) as total_fisik
+FROM stok_fisik_at
+WHERE tanggal BETWEEN '$tglAwal' AND '$tglAkhir'
+");
+
+$totalFisik = mysqli_fetch_assoc($qFisikSum)['total_fisik'];
+
+/* =========================
+   TAMBAHAN
+========================= */
+$qTambahan = mysqli_query($conn, "
+SELECT t.*, b.nama_barang
+FROM tambahan t
+LEFT JOIN barang b ON b.id_barang = t.id_barang
+WHERE t.tanggal BETWEEN '$tglAwal' AND '$tglAkhir'
+ORDER BY t.tanggal ASC
+");
+
+/* =========================
+   HITUNG TOTAL
+========================= */
 $total_stok = 0;
 $total_sisa = 0;
 
+$dataAT = [];
 while($row = $result->fetch_assoc()){
-
-    $stok = (int)$row['stok_asalan'];
-    $sisa = (int)$row['sisa_powder'];
-    $ket = ($sisa <= 0) ? "HABIS" : "READY";
-
-    $total_stok += $stok;
-    $total_sisa += $sisa;
-
-    $html .= "<tr>
-    <td>$no</td>
-    <td>{$row['nama_barang']}</td>
-    <td>{$row['tanggal']}</td>
-    <td>$stok</td>
-    <td>$sisa</td>
-    <td>$ket</td>
-    </tr>";
-
-    $no++;
+    $total_stok += (int)$row['stok_awal'];
+    $total_sisa += (int)$row['sisa_produksi'];
+    $dataAT[] = $row;
 }
 
-$html .= "
+$totalGlobalStok = $total_stok + $totalFisik;
+$totalGlobalSisa = $total_sisa;
+
+/* =========================
+   HTML PDF
+========================= */
+$html = '
+<style>
+body{ font-family: Calibri; font-size:12px; }
+table{ border-collapse:collapse; width:100%; }
+th, td{ border:1px solid #000; padding:6px; }
+th{ text-align:center; }
+.judul{ font-size:16px; font-weight:bold; text-align:center; }
+.header{ font-weight:bold; text-align:center; }
+</style>
+
+<h3>Ringkasan</h3>
+<p><i>PER</i>: '.$bulan.'-'.$tahun.'</p>
+
+<table>
 
 <tr>
-<td colspan='3'><b>JUMLAH</b></td>
-<td><b>$total_stok</b></td>
-<td><b>$total_sisa</b></td>
+<th colspan="8" class="judul">BAHAN BAKU AT</th>
+</tr>
+
+<tr class="header">
+<th>NO</th>
+<th>SUPPLIER</th>
+<th>TGL TERIMA</th>
+<th colspan="2">STOK</th>
+<th colspan="2">SISA</th>
+<th>KET</th>
+</tr>
+
+<tr class="header">
+<th colspan="8">STOK AT READY</th>
+</tr>
+';
+
+/* =========================
+   LOOP AT READY
+========================= */
+$no=1;
+foreach($dataAT as $row){
+
+$html .= '
+<tr>
+<td>'.$no++.'</td>
+<td>'.$row['nama_supplier'].'</td>
+<td>'.date('j-M-Y', strtotime($row['tanggal_terakhir'])).'</td>
+<td align="right">'.number_format($row['sisa_at'],0).'</td>
+<td>Kg</td>
+<td align="right">'.number_format($row['sisa_produksi'],0).'</td>
+<td>Kg</td>
 <td></td>
-</tr>";
+</tr>';
+}
 
-$html .= "</table>";
+$html .= '
+<tr class="header">
+<td colspan="3">JUMLAH</td>
+<td>'.number_format($total_stok,0).'</td>
+<td>Kg</td>
+<td>'.number_format($total_sisa,0).'</td>
+<td>Kg</td>
+<td></td>
+</tr>
 
-$dompdf = new Dompdf();
+/* =========================
+   FISIK
+========================= */
+<tr class="header">
+<td colspan="8">STOK AT FISIK HABIS</td>
+</tr>
+';
+
+if(mysqli_num_rows($qFisikRows) > 0){
+$noF=1;
+while($f = mysqli_fetch_assoc($qFisikRows)){
+
+$html .= '
+<tr>
+<td>'.$noF++.'</td>
+<td>'.$f['nama_supplier'].'</td>
+<td>'.date('j-M-Y', strtotime($f['tanggal'])).'</td>
+<td align="right">'.number_format($f['jumlah'],0).'</td>
+<td>Kg</td>
+<td></td>
+<td>Kg</td>
+<td>'.$f['keterangan'].'</td>
+</tr>';
+}
+
+$html .= '
+<tr class="header">
+<td colspan="3">JUMLAH</td>
+<td>'.number_format($totalFisik,0).'</td>
+<td>Kg</td>
+<td></td>
+<td>Kg</td>
+<td></td>
+</tr>';
+}
+
+$html .= '
+<tr class="header">
+<td colspan="3">TOTAL</td>
+<td>'.number_format($totalGlobalStok,0).'</td>
+<td>Kg</td>
+<td>'.number_format($totalGlobalSisa,0).'</td>
+<td>Kg</td>
+<td></td>
+</tr>
+
+/* =========================
+   TAMBAHAN
+========================= */
+<tr class="header">
+<td colspan="8">TAMBAHAN</td>
+</tr>
+';
+
+if(mysqli_num_rows($qTambahan) > 0){
+$noT=1;
+while($t = mysqli_fetch_assoc($qTambahan)){
+
+$html .= '
+<tr>
+<td>'.$noT++.'</td>
+<td colspan="4">'.$t['nama_barang'].'</td>
+<td>'.number_format($t['jumlah'],0).'</td>
+<td>Kg</td>
+<td>'.$t['keterangan'].'</td>
+</tr>';
+}
+}
+
+$html .= '</table>';
+
+
+
+// ================================
+// DOMPDF CONFIG
+// ================================
+$options = new Options();
+$options->set('isRemoteEnabled', true);
+
+$dompdf = new Dompdf($options);
 $dompdf->loadHtml($html);
-$dompdf->setPaper('A4', 'portrait');
+$dompdf->setPaper('A4', 'potrait');
 $dompdf->render();
-$dompdf->stream("Ringkasan_AT_{$bulan}_{$tahun}.pdf");
+
+// ================================
+// OUTPUT PDF
+// ================================
+$dompdf->stream("Ringkasan AT_$bulan-$tahun.pdf", ["Attachment"=>0]);

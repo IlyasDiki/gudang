@@ -18,6 +18,8 @@ $tglAkhir = date('Y-m-t', strtotime($tglAwal));
 $q = mysqli_query($conn, "
   SELECT
     d.tanggal,
+    d.id_mutasi_detail,
+    md.jumlah AS stok_sumber,
     b.nama_barang,
     d.sortir,
     d.ma,
@@ -29,11 +31,15 @@ $q = mysqli_query($conn, "
   FROM at_detail d
   JOIN barang b ON b.id_barang = d.id_barang
   JOIN kelompok_barang k ON k.id_kelompok = b.id_kelompok
+
+  LEFT JOIN mutasi_detail md 
+    ON md.id_detail = d.id_mutasi_detail
+
   WHERE DATE(d.tanggal) BETWEEN '$tglAwal' AND '$tglAkhir'
   AND d.id_barang = '$id_barang_arang'
   ". (!empty($id_supplier) ? " AND d.id_supplier = '$id_supplier'" : "") . "
-    ORDER BY d.tanggal ASC
-  ");
+  ORDER BY d.id_mutasi_detail, d.tanggal ASC
+");
 
 $qListBarang = mysqli_query($conn, "
   SELECT id_barang, nama_barang, kode_barang
@@ -64,47 +70,29 @@ if (!empty($id_supplier)) {
   $namaSupplierDipilih = mysqli_fetch_assoc($qNama)['nama_supplier'] ?? '';
 }
 
+
 $data = [];
-$total = [
-  'sortir'=>0,'ma'=>0,'aa'=>0,'b_mentah'=>0,'air'=>0,'atp'=>0
-];
+$total = ['sortir'=>0,'ma'=>0,'aa'=>0,'b_mentah'=>0,'air'=>0,'atp'=>0];
 
 while ($row = mysqli_fetch_assoc($q)) {
-  // pastikan float
-  $row['sortir']   = (float)$row['sortir'];
-  $row['ma']       = (float)$row['ma'];
-  $row['aa']       = (float)$row['aa'];
-  $row['b_mentah'] = (float)$row['b_mentah'];
-  $row['air']      = (float)$row['air'];
-  $row['atp']      = (float)$row['atp'];
-
-  $data[] = $row;
-
   foreach ($total as $k => $v) {
-    $total[$k] += (float)$row[$k];
+    $row[$k] = (float)$row[$k];
+    $total[$k] += $row[$k];
   }
+  $data[] = $row;
 }
 
-/* ==========================
-   AMBIL DATA PRODUKSI
-   ========================== */
-/*
-  CATATAN:
-  - Pastikan nama field sesuai database kamu.
-  - Jika beda, bilang aku nanti aku sesuaikan.
-*/
+/*========================
+   DATA PRODUKSI
+========================== */
 $qProd = mysqli_query($conn, "
-  SELECT 
-    p.tanggal,
-    p.id_barang_atp,
-    pd.mixer
+  SELECT p.tanggal, pd.mixer
   FROM produksi p
   JOIN produksi_detail pd ON pd.id_produksi = p.id_produksi
-  WHERE 1=1
-  AND p.id_barang_atp = '$id_barang_powder'
+  WHERE p.id_barang_atp = '$id_barang_powder'
   ". (!empty($id_supplier) ? " AND p.id_supplier = '$id_supplier'" : "") . "
-    ORDER BY p.tanggal ASC
-  ");
+  ORDER BY p.tanggal ASC
+");
 
 $dataProd = [];
 while ($row = mysqli_fetch_assoc($qProd)) {
@@ -112,73 +100,39 @@ while ($row = mysqli_fetch_assoc($qProd)) {
   $dataProd[] = $row;
 }
 
-$qAwal = mysqli_query($conn, "
-
-SELECT
-  (
-    /* TOTAL MASUK (STOK AWAL) */
-    IFNULL((
-      SELECT SUM(md.jumlah)
-      FROM mutasi m
-      JOIN mutasi_detail md ON m.id_mutasi = md.id_mutasi
-      WHERE m.id_jenis = 5
-      AND md.id_barang = '$id_barang_arang'
-      ".(!empty($id_supplier) ? " AND md.id_supplier = '$id_supplier'" : "")."
-      AND m.tanggal < '$tglAwal'
-    ),0)
-
-    -
-
-    /* TOTAL PEMAKAIAN AT */
-    IFNULL((
-      SELECT SUM(
-        d.sortir + d.ma + d.aa + d.b_mentah + d.air + d.atp
-      )
-      FROM at_detail d
-      WHERE d.id_barang = '$id_barang_arang'
-      ".(!empty($id_supplier) ? " AND d.id_supplier = '$id_supplier'" : "")."
-      AND d.tanggal < '$tglAwal'
-    ),0)
-
-  ) AS total_stok_awal
-
-");
 /* ==========================
-   HITUNG RINGKASAN
-   ========================== */
-
-$rowAwal = mysqli_fetch_assoc($qAwal);
-$jumlah_awal = (float)$rowAwal['total_stok_awal'];
-
-// Jika hasilnya kosong (belum ada input), set jadi 0
-if (!$jumlah_awal) {
-    $jumlah_awal = 0;
-}
+   RINGKASAN (tetap pakai global)
+========================== */
+$jumlah_awal = !empty($data) ? (float)$data[0]['stok_sumber'] : 0;
 
 $total_pakai = array_sum($total);
-$susut = $jumlah_awal > 0 
-  ? ($jumlah_awal - $total['sortir']) / $jumlah_awal 
+
+$susut = $jumlah_awal > 0
+  ? ($jumlah_awal - $total['atp']) / $jumlah_awal
   : 0;
 
 $kand_ma = $jumlah_awal > 0 ? ($total['ma'] / $jumlah_awal) * 100 : 0;
 $kand_aa = $jumlah_awal > 0 ? ($total['aa'] / $jumlah_awal) * 100 : 0;
 $kand_bm = $jumlah_awal > 0 ? ($total['b_mentah'] / $jumlah_awal) * 100 : 0;
-$total_susut = $jumlah_awal > 0 ? ($susut / $jumlah_awal) * 100 : 0;
+
+$total_susut = $susut * 100;
 
 /* ==========================
-   MAX ROWS UNTUK EXCEL STYLE
-   ========================== */
+   LOOP PREP
+========================== */
 $rowsAT = count($data);
 $rowsProd = count($dataProd);
-
 $maxRows = max($rowsAT, $rowsProd);
 if ($maxRows < 1) $maxRows = 1;
 
-/* saldo berjalan */
-$saldoAT = $jumlah_awal;
-$saldoProd = 0;
+/* saldo */
+$saldoAT = 0;
+$last_mutasi = null;
 
-/* ambil tanggal terima (pakai tanggal AT pertama kalau ada) */
+$saldoProd = 0;
+$initProd = false;
+
+/* tanggal */
 $tgl_terima = $rowsAT > 0 ? $data[0]['tanggal'] : '-';
 
 $namaBulan = [
@@ -275,8 +229,7 @@ $judulBulan = ($namaBulan[$bulan] ?? $bulan) . " " . $tahun;
 
   <div class="card shadow-sm">
     <div class="card-body">
-<a href="../index.php" 
-            class="btn btn-info btn-sm">Back</a>
+      <a href="../transaksi/pemakaian_at.php" class="btn btn-info btn-sm">Back</a>
       <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
         <div>
           <h4 class="mb-0">AT & Powder Bulanan</h4>
@@ -331,15 +284,15 @@ $judulBulan = ($namaBulan[$bulan] ?? $bulan) . " " . $tahun;
 
         <button class="btn btn-primary mr-2" type="submit">Tampilkan</button>
 
-        <a class="btn btn-success mr-2"
+        <button class="btn btn-success mr-2"
             href="pemakaian_at_laporan_excel.php?bulan=<?= $bulan ?>&tahun=<?= $tahun ?>">
             Export Excel
-        </a>
+        </button>
 
-        <a class="btn btn-danger"
+        <button class="btn btn-danger"
             href="pemakaian_at_laporan_pdf.php?bulan=<?= $bulan ?>&tahun=<?= $tahun ?>">
             Export PDF
-        </a>
+        </button>
       </form>
   <table>
     <tr class="bg-head">
@@ -371,24 +324,30 @@ $judulBulan = ($namaBulan[$bulan] ?? $bulan) . " " . $tahun;
       <th>SALDO</th>
     </tr>
 
-    <?php for ($i = 0; $i < $maxRows; $i++): ?>
-      <?php
+    <?php for ($i=0;$i<$maxRows;$i++): 
+
       $dAT = $data[$i] ?? null;
       $dP  = $dataProd[$i] ?? null;
 
-      // saldo AT jalan
+      /* SALDO AT */
       if ($dAT) {
-        $saldoAT -= $dAT['sortir']; // saldo AT berkurang berdasarkan sortir
+        if ($last_mutasi != $dAT['id_mutasi_detail']) {
+          $saldoAT = (float)$dAT['stok_sumber'];
+          $last_mutasi = $dAT['id_mutasi_detail'];
+        }
+        $saldoAT -= $dAT['sortir'];
       }
 
-      // saldo produksi jalan
-      $totalATP = (float)$total['atp'];   // total ATP dari AT
-      if ($i == 0){
-        $saldoProd = $totalATP; // saldo produksi awal = total ATP
-      } else if ($dP) {
-        $saldoProd -= $dP['mixer']; // saldo produksi bertambah berdasarkan mixer
+      /* SALDO PRODUKSI */
+      if (!$initProd) {
+        $saldoProd = (float)$total['atp'];
+        $initProd = true;
       }
-      ?>
+
+      if ($dP) {
+        $saldoProd -= $dP['mixer'];
+      }
+    ?>
 
       <tr>
 
@@ -396,7 +355,7 @@ $judulBulan = ($namaBulan[$bulan] ?? $bulan) . " " . $tahun;
         <?php if ($i == 0): ?>
           <td rowspan="<?= $maxRows ?>">1</td>
           <td rowspan="<?= $maxRows ?>"><?= $tgl_terima ?></td>
-          <td rowspan="<?= $maxRows ?>"><?= angka($jumlah_awal) ?></td>
+          <td rowspan="<?= $maxRows ?>"><?= $rowsAT > 0 ? angka($data[0]['stok_sumber']) : 0 ?></td>
         <?php endif; ?>
 
         <!-- PEMAKAIAN AT -->
@@ -419,14 +378,13 @@ $judulBulan = ($namaBulan[$bulan] ?? $bulan) . " " . $tahun;
         <?php endif; ?>
 
         <!-- PEMAKAIAN PRODUKSI -->
-        <td><?= $dP ? angka($totalATP) : '' ?></td>
+        <td><?= $dP ? angka($total['atp']) : '' ?></td>
         <td><?= $dP ? $dP['tanggal'] : '' ?></td>
         <td><?= $dP ? $dP['mixer'] : '' ?></td>
         <td><?= $dP ? angka($saldoProd) : '' ?></td>
 
       </tr>
     <?php endfor; ?>
-
     <!-- TOTAL ROW -->
     <tr class="bg-head">
       <th colspan="4">TOTAL</th>
@@ -442,7 +400,7 @@ $judulBulan = ($namaBulan[$bulan] ?? $bulan) . " " . $tahun;
       <th><?= round($kand_aa,2) ?>%</th>
       <th><?= round($kand_bm,2) ?>%</th>
       <th><?= angka($susut) ?></th>
-      <th><?= round($total_susut,2) ?>%</th>
+      <th><?= round($total_susut  ,2) ?>%</th>
 
       <th colspan="4"></th>
     </tr>

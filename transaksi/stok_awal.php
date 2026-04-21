@@ -218,15 +218,10 @@ let nomor = 0;
 /* ============================= */
 
 $("#barangSelect").on("change", function(){
-
 let selected = $(this).find(":selected");
-
 if(selected.length == 0) return;
-
 let pakaiSupplier = selected.data("supplier");
-
 if(pakaiSupplier == 1){
-
 $("#supplierBox").show();
 
 }else{
@@ -240,13 +235,9 @@ $("#supplierSelect").val(null).trigger("change");
 
 
 function updateNomor() {
-
 let no = 1;
-
 $("#tabelStokAwal tbody tr.dataRow").each(function(){
-
 $(this).find(".no").text(no++);
-
 });
 
 }
@@ -261,10 +252,8 @@ $("#btnTambah").click(function () {
 let idBarang = $("#barangSelect").val();
 let namaBarang = $("#barangSelect option:selected").text();
 let jumlah = $("#jumlahInput").val();
-
 let idSupplier = $("#supplierSelect").val();
 let namaSupplier = $("#supplierSelect option:selected").text();
-
 let pakaiSupplier = $("#barangSelect option:selected").data("supplier");
 
 
@@ -293,7 +282,6 @@ return;
 
 
 $("#rowKosong").remove();
-
 nomor++;
 
 
@@ -301,12 +289,8 @@ nomor++;
 
 let row = `
 <tr class="dataRow" id="row_${idBarang}_${idSupplier}">
-
 <td class="no">${nomor}</td>
-
-<td>
-${namaBarang}
-${idSupplier ? "<br><small class='text-muted'>Supplier : "+namaSupplier+"</small>" : ""}
+<td>${namaBarang}${idSupplier ? "<br><small class='text-muted'>Supplier : "+namaSupplier+"</small>" : ""}
 <input type="hidden" name="id_barang[]" value="${idBarang}">
 <input type="hidden" name="id_supplier[]" value="${idSupplier}">
 </td>
@@ -364,10 +348,7 @@ Belum ada barang yang ditambahkan.
 nomor = 0;
 
 }
-
 });
-
-
 });
 
 </script>

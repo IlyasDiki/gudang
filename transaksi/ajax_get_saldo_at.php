@@ -6,57 +6,51 @@ header('Content-Type: application/json');
 $idBarang   = $_GET['id_barang'] ?? null;
 $idSupplier = $_GET['id_supplier'] ?? null;
 
-if(!$idBarang || !$idSupplier){
-
-echo json_encode([
-'status'=>'error',
-'message'=>'Parameter tidak lengkap'
-]);
-
-exit;
+if (!$idBarang || !$idSupplier) {
+    echo json_encode(['status'=>'error']);
+    exit;
 }
 
+$q = mysqli_query($conn, "
+SELECT 
+    md.id_detail,
+    m.tanggal,
+    md.jumlah,
 
-/* ======================
-   STOK MASUK (STOK AWAL)
-====================== */
+    (
+        md.jumlah -
+        IFNULL((
+            SELECT SUM(sortir+ma+aa+b_mentah+air+atp)
+            FROM at_detail
+            WHERE id_mutasi_detail = md.id_detail
+        ),0)
+    ) AS sisa
 
-$qMasuk=mysqli_query($conn,"
-SELECT IFNULL(SUM(jumlah),0) AS stok_masuk
-FROM mutasi_detail
-WHERE id_barang='$idBarang'
-AND id_supplier='$idSupplier'
+FROM mutasi_detail md
+JOIN mutasi m ON m.id_mutasi = md.id_mutasi
+
+WHERE md.id_barang = '$idBarang'
+AND md.id_supplier = '$idSupplier'
+
+AND m.arah = 'MASUK'
+
+HAVING sisa > 0
+
+ORDER BY m.tanggal ASC
 ");
 
-$masuk=mysqli_fetch_assoc($qMasuk)['stok_masuk'] ?? 0;
+$data = [];
 
+while ($row = mysqli_fetch_assoc($q)) {
 
-/* ======================
-   PEMAKAIAN AT
-====================== */
-
-$qPakai=mysqli_query($conn,"
-SELECT IFNULL(SUM(
-sortir + ma + aa + b_mentah + air + atp
-),0) AS total_pakai
-FROM at_detail
-WHERE id_barang='$idBarang'
-AND id_supplier='$idSupplier'
-");
-
-$pakai=mysqli_fetch_assoc($qPakai)['total_pakai'] ?? 0;
-
-
-/* ======================
-   SALDO
-====================== */
-
-$saldo = $masuk - $pakai;
+    $data[] = [
+        'id' => $row['id_detail'],
+        'saldo' => $row['sisa'],
+        'label' => date('d M Y', strtotime($row['tanggal']))
+    ];
+}
 
 echo json_encode([
-
-'status'=>'ok',
-
-'saldo'=>rtrim(rtrim(number_format($saldo,2,'.',''),'0'),'.')
-
+    'status' => 'ok',
+    'stok' => $data
 ]);

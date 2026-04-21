@@ -62,7 +62,7 @@ include "../layout/sidebar.php";
 <form method="post" action="pemakaian_at_simpan.php">
 
 <div class="card-body">
-
+<input type="hidden" name="id_mutasi_detail" id="id_mutasi_detail">
 <!-- ================= HEADER ================= -->
 <div class="row">
     <div class="col-md-3">
@@ -195,15 +195,17 @@ $('#id_supplier').change(function () {
 
     if (!supplier) return;
 
-    fetch('ajax_get_stok_list.php?id_barang=<?= $idBarang ?>&id_supplier=' + supplier)
+    fetch('ajax_get_saldo_at.php?id_barang=<?= $idBarang ?>&id_supplier=' + supplier)
         .then(res => res.json())
         .then(data => {
 
+            if (data.status !== 'ok') return;
+
             let html = '<option value="">-- Pilih Sumber Stok --</option>';
 
-            data.forEach(row => {
-                html += `<option value="${row.id}">
-                            ${row.tanggal} - ${row.saldo} kg
+            data.stok.forEach(row => {
+                html += `<option value="${row.id}" data-saldo="${row.saldo}">
+                            ${row.label} (${row.saldo} kg)
                          </option>`;
             });
 
@@ -212,22 +214,22 @@ $('#id_supplier').change(function () {
         });
 });
 
-/* ========================= PILIH SUMBER STOK ========================= */
+
 $('#sumber_stok').change(function () {
 
     let id = $(this).val();
+    let saldo = $(this).find(':selected').data('saldo');
 
-    $('#formPemakaian').hide();
-    $('#saldo').val(0);
+    $('#id_mutasi_detail').val(id);
 
-    if (!id) return;
+    if (!id) {
+        $('#formPemakaian').hide();
+        $('#saldo').val(0);
+        return;
+    }
 
-    fetch('ajax_get_saldo_by_id.php?id=' + id)
-        .then(res => res.json())
-        .then(data => {
-            $('#saldo').val(data.saldo);
-            $('#formPemakaian').show();
-        });
+    $('#saldo').val(saldo);
+    $('#formPemakaian').show();
 });
 </script>
 
