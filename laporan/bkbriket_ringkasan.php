@@ -4,23 +4,43 @@ require '../config/init.php';
 $id_barang_briket = $_GET['id_barang_briket'] ?? '';
 $bulan = $_GET['bulan'] ?? date('m');
 $tahun = $_GET['tahun'] ?? date('Y');
-$status = $_GET['status'] ?? '';
 
 $bulan = sprintf("%02d", (int)$bulan);
 $tglAwal = "$tahun-$bulan-01";
 $tglAkhir = date("Y-m-t", strtotime($tglAwal));
+
+$status = $_GET['status'] ?? '';
+$whereBarang = "WHERE id_kelompok IN (15,16)";
+/* =========================
+   LIST BARANG DROPDOWN
+========================= */
+
+if ($status == 'LOLOS') {
+  $whereBarang = "WHERE id_kelompok = 15";
+} elseif ($status == 'KARANTINA') {
+  $whereBarang = "WHERE id_kelompok = 16";
+}
 
 /* =========================
    DEFAULT BARANG
 ========================= */
 if ($id_barang_briket == '') {
   $qDef = mysqli_query($conn, "
-    SELECT id_barang
-    FROM barang
-    WHERE id_kelompok = '6'
-    ORDER BY nama_barang ASC
+    SELECT b2.id_barang
+    FROM barang b2
+    JOIN bkbriket b ON b.id_barang_briket = b2.id_barang
+    GROUP BY b2.id_barang
+    HAVING
+      " . ($status == 'LOLOS' ? "
+          SUM(b.status = 'LOLOS') > 0
+          AND SUM(b.status = 'KARANTINA') = 0
+      " : ($status == 'KARANTINA' ? "
+          SUM(b.status = 'KARANTINA') > 0
+          AND SUM(b.status = 'LOLOS') = 0
+      " : "1=1")) . "
     LIMIT 1
   ");
+
   if ($qDef && mysqli_num_rows($qDef) > 0) {
     $id_barang_briket = mysqli_fetch_assoc($qDef)['id_barang'];
   }
@@ -44,16 +64,25 @@ if ($qBarang && mysqli_num_rows($qBarang) > 0) {
   $kodeBarang = $rb['kode_barang'] ?? '-';
 }
 
-/* =========================
-   LIST BARANG DROPDOWN
-========================= */
 $qListBarang = mysqli_query($conn, "
-  SELECT id_barang, nama_barang, kode_barang
-  FROM barang
-  WHERE id_kelompok = '6'
-  ORDER BY nama_barang ASC
+  SELECT DISTINCT 
+    br.id_barang,
+    br.nama_barang,
+    br.kode_barang
+  FROM barang br
+  JOIN bkbriket bk ON bk.id_barang_briket = br.id_barang
+  " . ($status ? "WHERE bk.status = '$status'" : "") . "
+  ORDER BY br.nama_barang ASC
 ");
 
+$dataBarang = [];
+while ($row = mysqli_fetch_assoc($qListBarang)) {
+  $dataBarang[] = $row;
+}
+
+if ($id_barang_briket && count($dataBarang) == 0) {
+  $id_barang_briket = '';
+}
 /* =========================
    BUILD STATUS FILTER
 ========================= */
@@ -61,6 +90,7 @@ $statusFilter = '';
 if ($status) {
   $statusFilter = "AND b.status = '$status'";
 }
+
 
 /* =========================
    QUERY RINGKASAN (SAMA DENGAN LAPORAN)
@@ -129,7 +159,7 @@ $q = mysqli_query($conn, "
   ORDER BY b.tanggal ASC
 ");
 
-$statusLabel = "LOLOS";
+$statusLabel = $status ?: "LOLOS";
 
 $qStatus = mysqli_query($conn, "
     SELECT status 
@@ -138,10 +168,6 @@ $qStatus = mysqli_query($conn, "
     AND tanggal BETWEEN '$tglAwal' AND '$tglAkhir'
     LIMIT 1
 ");
-
-if($qStatus && mysqli_num_rows($qStatus)>0){
-    $statusLabel = mysqli_fetch_assoc($qStatus)['status'];
-}
 
 if (!$q) {
   die("Query error: " . mysqli_error($conn));
@@ -275,18 +301,28 @@ $grandTotalSaldo = 0;
         <div class="per-label">PER : <?= date('F Y', strtotime($tglAwal)) ?></div>
         <div class="kode-big"><?= htmlspecialchars($namaBarang) ?></div>
       </div>
+
       <!-- Filter -->
       <form method="get" class="mb-3">
         <div class="row">
           <div class="col-md-2">
+            <label class="font-weight-bold">Status</label>
+            <select name="status" class="form-control form-control-sm">
+              <option value="">-- Semua Status --</option>
+              <option value="LOLOS" <?= $status=='LOLOS'?'selected':'' ?>>LOLOS</option>
+              <option value="KARANTINA" <?= $status=='KARANTINA'?'selected':'' ?>>KARANTINA</option>
+            </select>
+          </div>
+
+          <div class="col-md-2">
             <label class="font-weight-bold">Barang</label>
             <select name="id_barang_briket" class="form-control form-control-sm" required>
-              <?php while($b = mysqli_fetch_assoc($qListBarang)): ?>
+              <?php foreach($dataBarang as $b): ?>
                 <option value="<?= $b['id_barang'] ?>"
                   <?= ($id_barang_briket == $b['id_barang']) ? 'selected' : '' ?>>
-                  <?= htmlspecialchars(($b['kode_barang'] ?? '-') . " - " . ($b['nama_barang'] ?? '-')) ?>
+                  <?= htmlspecialchars($b['nama_barang'] ?? '-') ?>
                 </option>
-              <?php endwhile; ?>
+                <?php endforeach; ?>
             </select>
           </div>
 
@@ -306,7 +342,7 @@ $grandTotalSaldo = 0;
           <div class="col-md-2">
             <label class="font-weight-bold">Tahun</label>
             <select name="tahun" class="form-control form-control-sm">
-              <?php for($t=date('Y')-5;$t<=date('Y')+1;$t++): ?>
+              <?php for($t=date('Y')-1;$t<=date('Y')+1;$t++): ?>
                 <option value="<?= $t ?>" <?= $tahun==$t?'selected':'' ?>>
                   <?= $t ?>
                 </option>
@@ -314,14 +350,6 @@ $grandTotalSaldo = 0;
             </select>
           </div>
 
-          <div class="col-md-2">
-            <label class="font-weight-bold">Status</label>
-            <select name="status" class="form-control form-control-sm">
-              <option value="">-- Semua Status --</option>
-              <option value="LOLOS" <?= $status=='LOLOS'?'selected':'' ?>>LOLOS</option>
-              <option value="KARANTINA" <?= $status=='KARANTINA'?'selected':'' ?>>KARANTINA</option>
-            </select>
-          </div>
 
           <div class="col-md-4">
             <label class="font-weight-bold">&nbsp;</label>
@@ -444,5 +472,19 @@ $grandTotalSaldo = 0;
 <script src="../plugins/jquery/jquery.min.js"></script>
 <script src="../plugins/bootstrap/js/bootstrap.bundle.min.js"></script>
 <script src="../dist/js/adminlte.min.js"></script>
+<script>
+const form = document.querySelector('form');
+
+// AUTO reload saat STATUS berubah
+document.querySelector('select[name="status"]').addEventListener('change', function(){
+    form.submit();
+});
+
+// AUTO reload saat BARANG berubah
+document.querySelector('select[name="id_barang_briket"]').addEventListener('change', function(){
+    form.submit();
+});
+</script>
+
 </body>
 </html>

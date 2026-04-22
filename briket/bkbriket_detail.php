@@ -132,6 +132,7 @@ include "../layout/sidebar.php";
                 <th width="110">KRG</th>
                 <th width="130">ADD (Kg)</th>
                 <th width="130">JML (Kg)</th>
+                <th width="130">Keterangan</th>
                 <th width="80">Hapus</th>
               </tr>
             </thead>
@@ -143,22 +144,22 @@ include "../layout/sidebar.php";
                 ?>
                   <tr data-id="<?= $b['id_bongkar'] ?>">
                     <td>
-                      <input type="date" name="b_tanggal[]" class="form-control"
-                        value="<?= htmlspecialchars($b['tanggal_bongkar']) ?>">
+                      <input type="date" name="b_tanggal[]" class="form-control" value="<?= htmlspecialchars($b['tanggal_bongkar']) ?>">
                       <input type="hidden" name="b_id[]" value="<?= $b['id_bongkar'] ?>">
                     </td>
                     <td>
-                      <input type="number" step="0.01" name="b_krg[]" class="form-control bongkar-krg"
-                        value="<?= htmlspecialchars($b['krg']) ?>">
+                      <input type="number" step="0.01" name="b_krg[]" class="form-control bongkar-krg" value="<?= htmlspecialchars($b['krg']) ?>">
                     </td>
                     <td>
-                      <input type="number" step="0.01" name="b_add[]" class="form-control bongkar-add"
-                        value="<?= htmlspecialchars($b['add_kg']) ?>">
+                      <input type="number" step="0.01" name="b_add[]" class="form-control bongkar-add" value="<?= htmlspecialchars($b['add_kg']) ?>">
                     </td>
                     <td>
-                      <input type="text" class="form-control bongkar-jml" readonly
-                        value="<?= number_format($jml,2) ?>">
+                      <input type="text" class="form-control bongkar-jml" readonly value="<?= number_format($jml,2) ?>">
                     </td>
+                    <td>
+                      <input type="text" name="ket[]" class="form-control" placeholder="Keterangan (opsional)">
+                    </td>
+
                     <td class="text-center">
                       <button type="button" class="btn btn-danger btn-sm btnHapusBongkar">
                         Hapus
@@ -217,20 +218,16 @@ include "../layout/sidebar.php";
                       </select>
                     </td>
                     <td>
-                      <input type="number" step="0.01" name="krg[]" class="form-control mutasi-krg"
-                        value="<?= htmlspecialchars($m['krg']) ?>">
+                      <input type="number" step="0.01" name="krg[]" class="form-control mutasi-krg" value="<?= htmlspecialchars($m['krg']) ?>">
                     </td>
                     <td>
-                      <input type="number" step="0.01" name="add_kg[]" class="form-control mutasi-add"
-                        value="<?= htmlspecialchars($m['add_kg']) ?>">
+                      <input type="number" step="0.01" name="add_kg[]" class="form-control mutasi-add" value="<?= htmlspecialchars($m['add_kg']) ?>">
                     </td>
                     <td>
-                      <input type="text" class="form-control mutasi-jml" readonly
-                        value="<?= number_format($jml,2) ?>">
+                      <input type="text" class="form-control mutasi-jml" readonly value="<?= number_format($jml,2) ?>">
                     </td>
                     <td>
-                      <input type="text" name="keterangan[]" class="form-control"
-                        value="<?= htmlspecialchars($m['keterangan'] ?? '') ?>">
+                      <input type="text" name="keterangan[]" class="form-control" value="<?= htmlspecialchars($m['keterangan'] ?? '') ?>">
                     </td>
                     <td class="text-center">
                       <button type="button" class="btn btn-danger btn-sm btnHapusMutasi">

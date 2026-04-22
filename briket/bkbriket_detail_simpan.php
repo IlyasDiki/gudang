@@ -67,7 +67,7 @@ for($i=0; $i<count($b_tanggal); $i++){
   $tgl        = $b_tanggal[$i] ?? '';
   $krg        = $b_krg[$i] ?? 0;
   $add        = $b_add[$i] ?? 0;
-  $ket        = $b_ket[$i] ?? '';
+  $ket = $_POST['ket'][$i] ?? '';
 
   $id_bongkar = mysqli_real_escape_string($conn, $id_bongkar);
   $tgl        = mysqli_real_escape_string($conn, $tgl);
@@ -89,7 +89,7 @@ for($i=0; $i<count($b_tanggal); $i++){
       SET tanggal_bongkar='$tgl',
           krg='$krg',
           add_kg='$add',
-          keterangan='$ket'
+          ket='$ket'
       WHERE id_bongkar='$id_bongkar'
         AND id_bk='$id_bk'
     ");
@@ -99,9 +99,9 @@ for($i=0; $i<count($b_tanggal); $i++){
     // INSERT jika id kosong
     mysqli_query($conn, "
       INSERT INTO bkbriket_bongkar
-        (id_bk, tanggal_bongkar, krg, add_kg)
+        (id_bk, tanggal_bongkar, krg, add_kg, ket)
       VALUES
-        ('$id_bk', '$tgl', '$krg', '$add')
+        ('$id_bk', '$tgl', '$krg', '$add', '$ket')
     ");
   }
 }
