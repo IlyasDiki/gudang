@@ -19,34 +19,20 @@ $id_barang = (int)$id_barang;
    ========================= */
 $sql = "
 SELECT 
-    d.id_mutasi_detail,
     d.id_supplier,
     s.nama_supplier,
 
     MAX(d.tanggal) as tanggal_terakhir,
 
-    /* stok awal */
-    md.jumlah as stok_awal,
+    /* stok awal dari mutasi */
+    MAX(md.jumlah) as stok_awal,
 
-    /* total sortir */
-    IFNULL(SUM(d.sortir),0) as total_sortir,
-
-    /* sisa AT (stok asal) */
-    (md.jumlah - IFNULL(SUM(d.sortir),0)) as sisa_at,
-
-    /* total powder */
-    IFNULL(SUM(d.atp),0) as total_atp,
-
-    /* total produksi */
-    IFNULL((
-        SELECT SUM(pd.mixer)
-        FROM produksi_detail pd
-        WHERE pd.id_mutasi_detail = d.id_mutasi_detail
-    ),0) as total_mixer,
+    /* sisa arang */
+    (MAX(md.jumlah) - SUM(d.sortir)) as sisa_at,
 
     /* sisa powder */
     (
-        IFNULL(SUM(d.atp),0)
+        SUM(d.atp)
         -
         IFNULL((
             SELECT SUM(pd.mixer)
@@ -63,30 +49,12 @@ WHERE d.tanggal <= '$tglAkhir'
 
 GROUP BY d.id_mutasi_detail
 
-HAVING 
-    (md.jumlah - IFNULL(SUM(d.sortir),0)) > 0
-    OR
-    (
-        IFNULL(SUM(d.atp),0)
-        -
-        IFNULL((
-            SELECT SUM(pd.mixer)
-            FROM produksi_detail pd
-            WHERE pd.id_mutasi_detail = d.id_mutasi_detail
-        ),0)
-    ) > 0
+HAVING sisa_at > 0 OR sisa_produksi > 0
 
 ORDER BY tanggal_terakhir DESC
 ";
 
 $result = $conn->query($sql);
-
-$dataGroup = [];
-
-while($row = $result->fetch_assoc()){
-    $supplier = $row['nama_supplier'] ?? '-';
-    $dataGroup[$supplier][] = $row;
-}
 
 // collect tambahan entries within the same period (and optional item filter)
 $adj = "
@@ -195,9 +163,6 @@ td{
   border:1px solid #000;
   padding:6px;
     text-align:left;
-}
-td:empty {
-    border-top: none;
 }
 .header-top{
     font-weight:bold;
@@ -337,38 +302,30 @@ $no = 1;
 $total_stok = 0;
 $total_sisa = 0;
 
-foreach($dataGroup as $supplier => $rows){
-    $first = true;
+while($row = $result->fetch_assoc()) {
 
-    foreach($rows as $row){
+    $stok = (int)$row['stok_awal']; // ⬅️ dari query
+    $sisa = (int)$row['sisa_produksi'];
 
-        echo "<tr>";
+    $total_stok += $stok;
+    $total_sisa += $sisa;
 
-        // NO hanya tampil di baris pertama
-        echo "<td>".($first ? $no++ : '')."</td>";
+    // accumulate grand total for saldo, so we can subtract fisik later
+    $grandTotalSaldo += $sisa;
 
-        // SUPPLIER hanya tampil sekali
-        echo "<td>".($first ? htmlspecialchars($supplier) : '')."</td>";
+    // KETERANGAN
+   //$ket = ($sisa <= 0) ? "HABIS" : "READY";
 
-        // TANGGAL tetap tampil semua
-        echo "<td>".date('j-M-Y', strtotime($row['tanggal_terakhir']))."</td>";
-
-        echo "<td align='right'>".number_format($row['sisa_at'],0)."</td>";
-        echo "<td width='1%'>Kg</td>";
-
-        echo "<td align='right'>".number_format($row['sisa_produksi'],0)."</td>";
-        echo "<td width='1%'>Kg</td>";
-
-        echo "<td></td>";
-        echo "</tr>";
-
-        $first = false;
-
-        // TOTAL tetap dihitung semua
-        $total_stok += (int)$row['stok_awal'];
-        $total_sisa += (int)$row['sisa_produksi'];
-        $grandTotalSaldo += (int)$row['sisa_produksi'];
-    }
+    echo "<tr>";
+    echo "<td>".$no++."</td>";
+    echo "<td>".htmlspecialchars($row['nama_supplier'] ?? '-')."</td>";
+    echo "<td>".date('j-M-Y', strtotime($row['tanggal_terakhir']))."</td>";
+    echo "<td align='right'>".number_format($row['sisa_at'],0)."</td>";
+    echo "<td align='right' width='1%'>Kg</td>";
+    echo "<td align='right'>".number_format($row['sisa_produksi'],0)."</td>";
+    echo "<td align='right' width='1%'>Kg</td>";
+    echo "<td align='center'></td>";
+    echo "</tr>";
 }
 // now that grandTotalSaldo is available, calculate totalAkhir
 $totalAkhir = $grandTotalSaldo - $totalFisik;

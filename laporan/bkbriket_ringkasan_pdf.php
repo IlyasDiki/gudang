@@ -6,97 +6,83 @@ use Dompdf\Dompdf;
 use Dompdf\Options;
 
 $id_barang_briket = $_GET['id_barang_briket'] ?? '';
+$status = $_GET['status'] ?? '';
+$statusLabel = $status ? strtoupper($status) : 'LOLOS';
 $bulan = $_GET['bulan'] ?? date('m');
 $tahun = $_GET['tahun'] ?? date('Y');
 
 $bulan = sprintf("%02d", (int)$bulan);
-$tahun = (int)$tahun;
-
 $tglAwal = "$tahun-$bulan-01";
 $tglAkhir = date("Y-m-t", strtotime($tglAwal));
 
-if ($id_barang_briket == '') {
-  die("Barang belum dipilih.");
+$whereBarangFilter = '';
+if ($id_barang_briket != '') {
+  $whereBarangFilter = "AND b.id_barang_briket = '$id_barang_briket'";
 }
 
-$id_barang_briket = (int)$id_barang_briket;
-
-/* =========================
-   NAMA BARANG
-========================= */
-$namaBarang = '-';
-$kodeBarang = '-';
-
-$qBarang = mysqli_query($conn, "
-  SELECT id_barang, nama_barang, kode_barang
-  FROM barang
-  WHERE id_barang = '$id_barang_briket'
-  LIMIT 1
-");
-if ($qBarang && mysqli_num_rows($qBarang) > 0) {
-  $rb = mysqli_fetch_assoc($qBarang);
-  $namaBarang = $rb['nama_barang'] ?? '-';
-  $kodeBarang = $rb['kode_barang'] ?? '-';
+$statusFilter = '';
+if ($status) {
+  $statusFilter = "AND b.status = '$status'";
 }
 
 /* =========================
-   QUERY RINGKASAN (SALDO)
+   QUERY (SAMA EXCEL)
 ========================= */
 $q = mysqli_query($conn, "
   SELECT
     b.id_bk,
-    b.tanggal AS tgl_produksi,
+    b.tanggal,
+    br.nama_barang,
 
     (SELECT MIN(tanggal_bongkar)
      FROM bkbriket_bongkar bo
-     WHERE bo.id_bk = b.id_bk
-    ) AS tgl_bongkar,
+     WHERE bo.id_bk = b.id_bk) AS tgl_bongkar,
+
+    (SELECT GROUP_CONCAT(DISTINCT ket SEPARATOR ', ')
+     FROM bkbriket_bongkar bo
+     WHERE bo.id_bk = b.id_bk) AS ket,
 
     (SELECT COALESCE(SUM(krg),0)
      FROM bkbriket_bongkar bo
-     WHERE bo.id_bk = b.id_bk
-    ) AS bongkar_krg,
+     WHERE bo.id_bk = b.id_bk) AS bongkar_krg,
 
     (SELECT COALESCE(SUM(add_kg),0)
      FROM bkbriket_bongkar bo
-     WHERE bo.id_bk = b.id_bk
-    ) AS bongkar_add,
+     WHERE bo.id_bk = b.id_bk) AS bongkar_add,
 
     (SELECT COALESCE(SUM(krg),0)
      FROM bkbriket_mutasi m
-     WHERE m.id_bk = b.id_bk AND m.jenis='PACKING'
-    ) AS packing_krg,
+     WHERE m.id_bk = b.id_bk AND m.jenis='PACKING') AS packing_krg,
 
     (SELECT COALESCE(SUM(add_kg),0)
      FROM bkbriket_mutasi m
-     WHERE m.id_bk = b.id_bk AND m.jenis='PACKING'
-    ) AS packing_add,
+     WHERE m.id_bk = b.id_bk AND m.jenis='PACKING') AS packing_add,
 
     (SELECT COALESCE(SUM(krg),0)
      FROM bkbriket_mutasi m
-     WHERE m.id_bk = b.id_bk AND m.jenis='REPRO'
-    ) AS repro_krg,
+     WHERE m.id_bk = b.id_bk AND m.jenis='REPRO') AS repro_krg,
 
     (SELECT COALESCE(SUM(add_kg),0)
      FROM bkbriket_mutasi m
-     WHERE m.id_bk = b.id_bk AND m.jenis='REPRO'
-    ) AS repro_add,
+     WHERE m.id_bk = b.id_bk AND m.jenis='REPRO') AS repro_add,
 
     (SELECT COALESCE(SUM(krg),0)
      FROM bkbriket_mutasi m
-     WHERE m.id_bk = b.id_bk AND m.jenis='JUAL'
-    ) AS jual_krg,
+     WHERE m.id_bk = b.id_bk AND m.jenis='JUAL') AS jual_krg,
 
     (SELECT COALESCE(SUM(add_kg),0)
      FROM bkbriket_mutasi m
-     WHERE m.id_bk = b.id_bk AND m.jenis='JUAL'
-    ) AS jual_add
+     WHERE m.id_bk = b.id_bk AND m.jenis='JUAL') AS jual_add
 
   FROM bkbriket b
+  JOIN barang br ON br.id_barang = b.id_barang_briket
+
   WHERE
-    b.id_barang_briket = '$id_barang_briket'
-    AND b.tanggal BETWEEN '$tglAwal' AND '$tglAkhir'
-  ORDER BY b.tanggal ASC
+    b.tanggal <= '$tglAkhir'
+    $statusFilter
+    $whereBarangFilter
+
+  ORDER BY br.nama_barang, b.tanggal ASC
 ");
 
 if(!$q){
@@ -104,135 +90,166 @@ if(!$q){
 }
 
 /* =========================
-   FORMAT
+   GROUP DATA (FIX)
 ========================= */
-function fCell($v){
-  if ($v === null) return "-";
-  if ($v === "" ) return "-";
-  if ($v == 0 || $v === "0" || $v === "0.00") return "-";
-  return $v;
-}
-
-$rows = [];
-$grandTotalSaldo = 0;
+$dataGroup = [];
+$grandTotal = 0;
 
 while($r = mysqli_fetch_assoc($q)){
 
-  $bongkar_krg = (float)$r['bongkar_krg'];
-  $bongkar_add = (float)$r['bongkar_add'];
-  $bongkar_jml = ($bongkar_krg * 25) + $bongkar_add;
+  $bongkar = ($r['bongkar_krg'] * 25) + $r['bongkar_add'];
+  $packing = ($r['packing_krg'] * 25) + $r['packing_add'];
+  $repro   = ($r['repro_krg'] * 25) + $r['repro_add'];
+  $jual    = ($r['jual_krg'] * 25) + $r['jual_add'];
 
-  $packing_jml = ((float)$r['packing_krg'] * 25) + (float)$r['packing_add'];
-  $repro_jml   = ((float)$r['repro_krg'] * 25) + (float)$r['repro_add'];
-  $jual_jml    = ((float)$r['jual_krg'] * 25) + (float)$r['jual_add'];
+  $saldo = $bongkar - ($packing + $repro + $jual);
 
-  $saldo_jml = $bongkar_jml - ($packing_jml + $repro_jml + $jual_jml);
-  $saldo_krg = floor($saldo_jml / 25);
-  $saldo_add = $saldo_jml - ($saldo_krg * 25);
+  if ($saldo <= 0) continue;
 
-  $grandTotalSaldo += $saldo_jml;
-
-  $rows[] = [
-    'tgl_produksi' => $r['tgl_produksi'] ? date('d-M-y', strtotime($r['tgl_produksi'])) : '-',
-    'tgl_bongkar'  => $r['tgl_bongkar'] ? date('d-M-y', strtotime($r['tgl_bongkar'])) : '-',
-    'saldo_krg'    => ($saldo_krg == 0 ? "-" : $saldo_krg),
-    'saldo_add'    => ($saldo_add == 0 ? "-" : number_format($saldo_add,2)),
-    'saldo_jml'    => ($saldo_jml == 0 ? "-" : number_format($saldo_jml,2)),
+  $dataGroup[$r['nama_barang']][] = [
+    'tgl' => $r['tanggal'],
+    'bongkar' => $r['tgl_bongkar'],
+    'saldo' => $saldo,
+    'krg' => floor($saldo/25),
+    'add' => $saldo - (floor($saldo/25)*25),
+    'ket' => $r['ket']
   ];
 }
+$statusLabel = $status ? strtoupper($status) : 'LOLOS';
 
+$statusClass = ($statusLabel == 'KARANTINA') 
+  ? 'status-karantina' 
+  : 'status-lolos';
 /* =========================
-   HTML UNTUK PDF
+   HTML
 ========================= */
 $html = '
-<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8">
 <style>
-  @page { size: A4 landscape; margin: 10mm; }
-  body { font-family: Arial, sans-serif; font-size: 12px; }
-  table { border-collapse: collapse; width: 100%; }
-  th, td { border: 1px solid #000; padding: 6px; font-size: 11px; }
-  th { text-align: center; font-weight: bold; background: #e9d9c7; }
-  .text-center { text-align: center; }
-  .text-end { text-align: right; }
-  .header-title { font-size: 26px; font-weight: 900; margin: 0; }
-  .sub { font-size: 14px; font-style: italic; margin: 0; }
-  .kode { font-size: 22px; font-weight: 800; margin-top: 10px; }
-  .box { background: #8BC34A; border: 2px solid #000; padding: 8px 14px; font-weight: 900; width: 200px; margin-top: 10px; text-align:center; }
-  .total { margin-top: 10px; border: 2px solid #000; height: 45px; width: 100%; }
-  .total td { border: 2px solid #000; font-weight: 900; font-size: 18px; }
+@page { size: A4 portrait; margin: 10mm; }
+
+body { font-family: DejaVu Sans, sans-serif; font-size: 11px; }
+.status-lolos { color: green; font-weight: bold; }
+.status-karantina { color: red; font-weight: bold; }
+table { border-collapse: collapse; width: 100%; table-layout: fixed; }
+
+th, td { border: 1px solid #000; padding: 4px; }
+th { background: #eaeaea; text-align: center; }
+
+td { text-align: center; }
+.td-ket { text-align: left; }
+.td-total { text-align: right; font-weight: bold; }
+
+.barang-row td {
+  background: #d9d9d9;
+  font-weight: bold;
+  border: none;
+  text-align: left;
+}
+
+.judul { text-align: center; font-size: 18px; font-weight: bold; }
+.subjudul { text-align: center; font-size: 14px; }
+.status { color: green; font-weight: bold; }
 </style>
-</head>
-<body>
 
-<div class="header-title">RINGKASAN</div>
-<div class="sub">PER : '.date('F Y', strtotime($tglAwal)).'</div>
-<div class="kode">'.htmlspecialchars($namaBarang).'</div>
-<div class="box">LOLOS</div>
-
+<div class="judul">RINGKASAN BRIKET <span class="'.$statusClass.'">'.$statusLabel.'</span></div>
+<div class="subjudul">PT DIAN CIPTA SEJAHTERA</div>
 <br>
 
 <table>
-  <tr>
-    <th rowspan="2" style="width:140px;">PRODUKSI</th>
-    <th rowspan="2" style="width:140px;">BONGKAR<br>OVEN</th>
-    <th colspan="3">RINCIAN KARUNG</th>
-    <th rowspan="2" style="width:160px;">SALDO (KG)</th>
-    <th rowspan="2">KET</th>
-  </tr>
-  <tr>
-    <th style="width:80px;">KRG</th>
-    <th style="width:80px;">KG</th>
-    <th style="width:80px;">ADD</th>
-  </tr>
+<tr>
+  <th rowspan="2">PRODUKSI</th>
+  <th rowspan="2">BONGKAR</th>
+  <th colspan="3">RINCIAN KARUNG</th>
+  <th rowspan="2">JUMLAH</th>
+  <th rowspan="2">TOTAL</th>
+  <th rowspan="2">KETERANGAN</th>
+</tr>
+<tr>
+  <th>KRG</th>
+  <th>KG</th>
+  <th>ADD</th>
+</tr>
 ';
 
-if(count($rows) == 0){
-  $html .= '<tr><td colspan="7" class="text-center">Tidak ada data pada periode ini.</td></tr>';
-} else {
-  foreach($rows as $row){
-    $html .= '
-      <tr>
-        <td class="text-center">'.$row['tgl_produksi'].'</td>
-        <td class="text-center">'.$row['tgl_bongkar'].'</td>
-        <td class="text-center">'.$row['saldo_krg'].'</td>
-        <td class="text-center">25</td>
-        <td class="text-center">'.$row['saldo_add'].'</td>
-        <td class="text-end">'.$row['saldo_jml'].'</td>
-        <td class="text-center">0</td>
-      </tr>
-    ';
+/* =========================
+   HANDLE DATA KOSONG
+========================= */
+if (empty($dataGroup)) {
+  $html .= '<tr><td colspan="8" style="text-align:center;">Tidak ada data</td></tr>';
+}
+
+/* =========================
+   LOOP DATA
+========================= */
+foreach($dataGroup as $barang => $rows){
+
+  $rowspan = count($rows);
+
+  $totalBarang = 0;
+  foreach($rows as $x){
+    $totalBarang += $x['saldo'];
   }
+
+  $html .= '
+  <tr class="barang-row">
+    <td colspan="8">'.$barang.'</td>
+  </tr>';
+
+  $first = true;
+
+  foreach($rows as $r){
+
+    $html .= '<tr>
+      <td>'.date('j-M-Y', strtotime($r['tgl'])).'</td>
+      <td>'.($r['bongkar'] ? date('j-M-Y', strtotime($r['bongkar'])) : '-').'</td>
+      <td>'.$r['krg'].'</td>
+      <td>25</td>
+      <td>'.number_format($r['add'],2).'</td>
+      <td class="td-total">'.number_format($r['saldo'],2).'</td>';
+
+    if($first){
+      $html .= '
+        <td rowspan="'.$rowspan.'" class="td-total">'.number_format($totalBarang,2).'</td>
+        <td rowspan="'.$rowspan.'" class="td-ket">'.$rows[0]['ket'].'</td>
+      ';
+    }
+
+    $html .= '</tr>';
+    $first = false;
+  }
+
+  $grandTotal += $totalBarang;
 }
 
 $html .= '
 </table>
 
-<table class="total" cellspacing="0" cellpadding="0">
-  <tr>
-    <td style="width:70%; text-align:center;">TOTAL SALDO</td>
-    <td style="width:30%; text-align:center;">'.number_format($grandTotalSaldo,2).'</td>
-  </tr>
-</table>
+<br>
 
-</body>
-</html>
+<table style="width:100%;">
+<tr>
+  <td style="border:0; font-weight:bold; font-size:18px;">TOTAL</td>
+  <td style="border:0; text-align:right; font-weight:bold; font-size:18px;">
+    '.number_format($grandTotal,2).'
+  </td>
+</tr>
+</table>
 ';
 
 /* =========================
-   DOMPDF RENDER
+   RENDER PDF
 ========================= */
 $options = new Options();
-$options->set('isRemoteEnabled', true);
-$options->set('defaultFont', 'Arial');
+$options->set('defaultFont', 'DejaVu Sans');
 
 $dompdf = new Dompdf($options);
 $dompdf->loadHtml($html);
-$dompdf->setPaper('A4', 'landscape');
+
+/* PENTING: portrait */
+$dompdf->setPaper('A4', 'portrait');
+
 $dompdf->render();
 
-$filename = "RINGKASAN_{$kodeBarang}_{$bulan}_{$tahun}.pdf";
-$dompdf->stream($filename, ["Attachment" => true]);
+/* 🔥 INI YANG BIKIN PREVIEW (BUKAN DOWNLOAD) */
+$dompdf->stream("ringkasan.pdf", ["Attachment" => false]);
 exit;

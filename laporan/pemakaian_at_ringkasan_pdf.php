@@ -82,18 +82,23 @@ ORDER BY t.tanggal ASC
 ");
 
 /* =========================
-   HITUNG TOTAL
+   HITUNG TOTAL & GROUP DATA
 ========================= */
 $total_stok = 0;
 $total_sisa = 0;
+$grandTotalSaldo = 0;
 
-$dataAT = [];
+$dataGroup = [];
+
 while($row = $result->fetch_assoc()){
+    $supplier = $row['nama_supplier'] ?? '-';
+    $dataGroup[$supplier][] = $row;
     $total_stok += (int)$row['stok_awal'];
     $total_sisa += (int)$row['sisa_produksi'];
-    $dataAT[] = $row;
+    $grandTotalSaldo += (int)$row['sisa_produksi'];
 }
 
+$totalAkhir = $grandTotalSaldo - $totalFisik;
 $totalGlobalStok = $total_stok + $totalFisik;
 $totalGlobalSisa = $total_sisa;
 
@@ -108,6 +113,7 @@ th, td{ border:1px solid #000; padding:6px; }
 th{ text-align:center; }
 .judul{ font-size:16px; font-weight:bold; text-align:center; }
 .header{ font-weight:bold; text-align:center; }
+.no-border th, .no-border td { border:none; padding:6px; }
 </style>
 
 <h3>Ringkasan</h3>
@@ -137,12 +143,14 @@ th{ text-align:center; }
    LOOP AT READY
 ========================= */
 $no=1;
-foreach($dataAT as $row){
-
-$html .= '
+foreach($dataGroup as $supplier => $rows){
+    $first = true;
+    
+    foreach($rows as $row){
+        $html .= '
 <tr>
-<td>'.$no++.'</td>
-<td>'.$row['nama_supplier'].'</td>
+<td>'.($first ? $no++ : '').'</td>
+<td>'.($first ? $row['nama_supplier'] : '').'</td>
 <td>'.date('j-M-Y', strtotime($row['tanggal_terakhir'])).'</td>
 <td align="right">'.number_format($row['sisa_at'],0).'</td>
 <td>Kg</td>
@@ -150,6 +158,8 @@ $html .= '
 <td>Kg</td>
 <td></td>
 </tr>';
+        $first = false;
+    }
 }
 
 $html .= '

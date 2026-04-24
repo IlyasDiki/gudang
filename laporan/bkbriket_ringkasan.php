@@ -24,7 +24,7 @@ if ($status == 'LOLOS') {
 /* =========================
    DEFAULT BARANG
 ========================= */
-if ($id_barang_briket == '') {
+if ($id_barang_briket == '' && isset($_GET['id_barang_briket']) == false) {
   $qDef = mysqli_query($conn, "
     SELECT b2.id_barang
     FROM barang b2
@@ -91,7 +91,10 @@ if ($status) {
   $statusFilter = "AND b.status = '$status'";
 }
 
-
+$whereBarangFilter = '';
+if ($id_barang_briket != '') {
+  $whereBarangFilter = "AND b.id_barang_briket = '$id_barang_briket'";
+}
 /* =========================
    QUERY RINGKASAN (SAMA DENGAN LAPORAN)
 ========================= */
@@ -100,14 +103,14 @@ $q = mysqli_query($conn, "
     b.status,
     b.id_bk,
     b.tanggal AS tgl_produksi,
+    br.id_barang,
+    br.nama_barang,
 
-    -- tanggal bongkar oven pertama
     (SELECT MIN(tanggal_bongkar)
      FROM bkbriket_bongkar bo
      WHERE bo.id_bk = b.id_bk
     ) AS tgl_bongkar,
 
-    -- total bongkar (MASUK)
     (SELECT COALESCE(SUM(krg),0)
      FROM bkbriket_bongkar bo
      WHERE bo.id_bk = b.id_bk
@@ -118,7 +121,6 @@ $q = mysqli_query($conn, "
      WHERE bo.id_bk = b.id_bk
     ) AS bongkar_add,
 
-    -- PACKING
     (SELECT COALESCE(SUM(krg),0)
      FROM bkbriket_mutasi m
      WHERE m.id_bk = b.id_bk AND m.jenis='PACKING'
@@ -129,7 +131,6 @@ $q = mysqli_query($conn, "
      WHERE m.id_bk = b.id_bk AND m.jenis='PACKING'
     ) AS packing_add,
 
-    -- REPRO
     (SELECT COALESCE(SUM(krg),0)
      FROM bkbriket_mutasi m
      WHERE m.id_bk = b.id_bk AND m.jenis='REPRO'
@@ -140,7 +141,6 @@ $q = mysqli_query($conn, "
      WHERE m.id_bk = b.id_bk AND m.jenis='REPRO'
     ) AS repro_add,
 
-    -- JUAL
     (SELECT COALESCE(SUM(krg),0)
      FROM bkbriket_mutasi m
      WHERE m.id_bk = b.id_bk AND m.jenis='JUAL'
@@ -152,11 +152,14 @@ $q = mysqli_query($conn, "
     ) AS jual_add
 
   FROM bkbriket b
+  JOIN barang br ON br.id_barang = b.id_barang_briket
+
   WHERE
-    b.id_barang_briket = '$id_barang_briket'
-    AND b.tanggal BETWEEN '$tglAwal' AND '$tglAkhir'
+    b.tanggal <= '$tglAkhir'
     $statusFilter
-  ORDER BY b.tanggal ASC
+    $whereBarangFilter
+
+  ORDER BY br.nama_barang, b.tanggal ASC
 ");
 
 $statusLabel = $status ?: "LOLOS";
@@ -316,13 +319,15 @@ $grandTotalSaldo = 0;
 
           <div class="col-md-2">
             <label class="font-weight-bold">Barang</label>
-            <select name="id_barang_briket" class="form-control form-control-sm" required>
+            <select name="id_barang_briket" class="form-control form-control-sm">
+              <option value="" <?= $id_barang_briket==''?'selected':'' ?>>-- Semua Barang --</option>
+
               <?php foreach($dataBarang as $b): ?>
                 <option value="<?= $b['id_barang'] ?>"
                   <?= ($id_barang_briket == $b['id_barang']) ? 'selected' : '' ?>>
                   <?= htmlspecialchars($b['nama_barang'] ?? '-') ?>
                 </option>
-                <?php endforeach; ?>
+              <?php endforeach; ?>
             </select>
           </div>
 
@@ -391,70 +396,128 @@ $grandTotalSaldo = 0;
             <th style="width: 80px;">ADD</th>
           </tr>
 
-          <?php if(mysqli_num_rows($q) == 0): ?>
-            <tr>
-              <td colspan="7" class="text-center">Tidak ada data pada periode ini.</td>
-            </tr>
-          <?php endif; ?>
+          <?php
+        // ======================
+        // GROUPING DATA PER BARANG
+        // ======================
 
-          <?php while($r = mysqli_fetch_assoc($q)): ?>
-            
-            <?php 
-              // ======================
-              // HITUNG BONGKAR (MASUK)
-              // ======================
-              $bongkar_krg = (float)$r['bongkar_krg'];
-              $bongkar_add = (float)$r['bongkar_add'];
-              $bongkar_jml = ($bongkar_krg * 25) + $bongkar_add;
+        $dataRows = [];
+        while ($row = mysqli_fetch_assoc($q)) {
+            $dataRows[] = $row;
+        }
+        ?>
 
-              // ======================
-              // HITUNG MUTASI (KELUAR)
-              // ======================
-              $packing_krg = (float)$r['packing_krg'];
-              $packing_add = (float)$r['packing_add'];
-              $packing_jml = ($packing_krg * 25) + $packing_add;
+        <?php if (count($dataRows) == 0): ?>
+        <tr>
+          <td colspan="7" class="text-center">Tidak ada data</td>
+        </tr>
+        <?php endif; ?>
 
-              $repro_krg = (float)$r['repro_krg'];
-              $repro_add = (float)$r['repro_add'];
-              $repro_jml = ($repro_krg * 25) + $repro_add;
 
-              $jual_krg = (float)$r['jual_krg'];
-              $jual_add = (float)$r['jual_add'];
-              $jual_jml = ($jual_krg * 25) + $jual_add;
+        <?php if ($id_barang_briket != ''): ?>
+        <!-- =========================
+            MODE 1 BARANG
+        ========================= -->
 
-              // ======================
-              // SALDO
-              // ======================
-              $saldo_jml = $bongkar_jml - ($packing_jml + $repro_jml + $jual_jml);
+        <?php foreach($dataRows as $r): ?>
 
-              // ubah saldo kg jadi krg + add (rumus laporan)
-              $saldo_krg = floor($saldo_jml / 25);
-              $saldo_add = $saldo_jml - ($saldo_krg * 25);
+        <?php
+          $bongkar = ($r['bongkar_krg'] * 25) + $r['bongkar_add'];
+          $packing = ($r['packing_krg'] * 25) + $r['packing_add'];
+          $repro   = ($r['repro_krg'] * 25) + $r['repro_add'];
+          $jual    = ($r['jual_krg'] * 25) + $r['jual_add'];
 
-              // total bawah
-              $grandTotalSaldo += $saldo_jml;
+          $saldo = $bongkar - ($packing + $repro + $jual);
+          if ($saldo <= 0) continue;
 
-              $tglProduksi = $r['tgl_produksi'] ? date('d-M-y', strtotime($r['tgl_produksi'])) : '-';
-              $tglBongkar = $r['tgl_bongkar'] ? date('d-M-y', strtotime($r['tgl_bongkar'])) : '-';
+          $saldo_krg = floor($saldo / 25);
+          $saldo_add = $saldo - ($saldo_krg * 25);
 
-              // biar saldo minus tetap aman tampil
-              $saldo_add_show = number_format($saldo_add,2);
-              $saldo_jml_show = number_format($saldo_jml,2);
-            ?>
-            <tr>
-              <td class="text-center"><?= $tglProduksi ?></td>
-              <td class="text-center"><?= $tglBongkar ?></td>
+          $grandTotalSaldo += $saldo;
 
-              <!-- INI YANG DITAMPILKAN ADALAH SALDO -->
-              <td class="text-center"><?= $f($saldo_krg) ?></td>
-              <td class="text-center">25</td>
-              <td class="text-center"><?= $f($saldo_add==0 ? "-" : $saldo_add_show) ?></td>
+          $tglProduksi = $r['tgl_produksi'] ? date('d-M-y', strtotime($r['tgl_produksi'])) : '-';
+          $tglBongkar  = $r['tgl_bongkar'] ? date('d-M-y', strtotime($r['tgl_bongkar'])) : '-';
+        ?>
 
-              <td class="text-end"><?= $f($saldo_jml==0 ? "-" : $saldo_jml_show) ?></td>
+        <tr>
+          <td class="text-center"><?= $tglProduksi ?></td>
+          <td class="text-center"><?= $tglBongkar ?></td>
 
-              <td class="text-center">0</td>
-            </tr>
-          <?php endwhile; ?>
+          <td class="text-center"><?= $saldo_krg ?></td>
+          <td class="text-center">25</td>
+          <td class="text-center"><?= number_format($saldo_add,2) ?></td>
+
+          <td class="text-end"><?= number_format($saldo,2) ?></td>
+          <td></td>
+        </tr>
+
+        <?php endforeach; ?>
+
+
+        <?php else: ?>
+        <!-- =========================
+            MODE SEMUA BARANG
+        ========================= -->
+
+        <?php
+        $groupBarang = [];
+        foreach ($dataRows as $row) {
+            $groupBarang[$row['id_barang']][] = $row;
+        }
+        ?>
+
+        <?php foreach($groupBarang as $id_barang => $rows): ?>
+
+        <tr style="background:#ddd; font-weight:bold;">
+          <td colspan="7"><?= htmlspecialchars($rows[0]['nama_barang']) ?></td>
+        </tr>
+
+        <?php $totalBarang = 0; ?>
+
+        <?php foreach($rows as $r): ?>
+
+        <?php
+          $bongkar = ($r['bongkar_krg'] * 25) + $r['bongkar_add'];
+          $packing = ($r['packing_krg'] * 25) + $r['packing_add'];
+          $repro   = ($r['repro_krg'] * 25) + $r['repro_add'];
+          $jual    = ($r['jual_krg'] * 25) + $r['jual_add'];
+
+          $saldo = $bongkar - ($packing + $repro + $jual);
+          if ($saldo <= 0) continue;
+
+          $saldo_krg = floor($saldo / 25);
+          $saldo_add = $saldo - ($saldo_krg * 25);
+
+          $totalBarang += $saldo;
+          $grandTotalSaldo += $saldo;
+
+          $tglProduksi = $r['tgl_produksi'] ? date('d-M-y', strtotime($r['tgl_produksi'])) : '-';
+          $tglBongkar  = $r['tgl_bongkar'] ? date('d-M-y', strtotime($r['tgl_bongkar'])) : '-';
+        ?>
+
+        <tr>
+          <td class="text-center"><?= $tglProduksi ?></td>
+          <td class="text-center"><?= $tglBongkar ?></td>
+
+          <td class="text-center"><?= $saldo_krg ?></td>
+          <td class="text-center">25</td>
+          <td class="text-center"><?= number_format($saldo_add,2) ?></td>
+
+          <td class="text-end"><?= number_format($saldo,2) ?></td>
+          <td></td>
+        </tr>
+
+        <?php endforeach; ?>
+
+        <tr style="font-weight:bold; background:#f5f5f5;">
+          <td colspan="5" class="text-end">TOTAL</td>
+          <td class="text-end"><?= number_format($totalBarang,2) ?></td>
+          <td></td>
+        </tr>
+
+        <?php endforeach; ?>
+
+        <?php endif; ?>
         </table>
       </div>
 

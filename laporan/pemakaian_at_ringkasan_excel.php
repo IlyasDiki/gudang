@@ -42,6 +42,13 @@ ORDER BY tanggal_terakhir DESC
 
 $result = $conn->query($sql);
 
+$dataGroup = [];
+
+while($row = $result->fetch_assoc()){
+    $supplier = $row['nama_supplier'] ?? '-';
+    $dataGroup[$supplier][] = $row;
+}
+
 /* =========================
    STOK FISIK
 ========================= */
@@ -87,12 +94,14 @@ $namaBulan = [
 ========================= */
 $total_stok = 0;
 $total_sisa = 0;
+$grandTotalSaldo = 0;
 
-$dataAT = [];
-while($row = $result->fetch_assoc()){
-    $total_stok += (int)$row['stok_awal'];
-    $total_sisa += (int)$row['sisa_produksi'];
-    $dataAT[] = $row;
+foreach($dataGroup as $supplier => $rows){
+    foreach($rows as $row){
+        $total_stok += (int)$row['stok_awal'];
+        $total_sisa += (int)$row['sisa_produksi'];
+        $grandTotalSaldo += (int)$row['sisa_produksi'];
+    }
 }
 
 $totalGlobalStok = $total_stok + $totalFisik;
@@ -130,6 +139,16 @@ tr.section-title th {
     font-size: 17px;
     font-weight: bold;
 }
+
+table th,
+table td {
+    border-top: 1px solid #000;
+}
+
+table tr:first-child th,
+table tr:first-child td {
+    border-top: none;
+}
 </style>
 
 <h4 class="mb-1 font-ringkasan"><b>Ringkasan</b></h4>
@@ -160,14 +179,18 @@ tr.section-title th {
     <th>KET</th>
 </tr>
 
-<tr class="font-header">
-    <th colspan="8">STOK AT READY</th>
+<tr class="font-header" style="<?php echo (empty($dataGroup) ? 'border-top: none;' : ''); ?>">
+    <th colspan="8" style="<?php echo (empty($dataGroup) ? 'border-top: none;' : ''); ?>">STOK AT READY</th>
 </tr>
 
-<?php $no=1; foreach($dataAT as $row): ?>
+<?php if(!empty($dataGroup)): ?>
+<?php $no=1; foreach($dataGroup as $supplier => $rows): 
+    $first = true;
+    foreach($rows as $row):
+?>
 <tr class="font-isi">
-    <td><?= $no++ ?></td>
-    <td><?= htmlspecialchars($row['nama_supplier'] ?? '-') ?></td>
+    <td><?= ($first ? $no++ : '') ?></td>
+    <td><?= ($first ? htmlspecialchars($supplier) : '') ?></td>
     <td><?= date('j-M-Y', strtotime($row['tanggal_terakhir'])) ?></td>
     <td><?= number_format($row['sisa_at'],0) ?></td>
     <td>Kg</td>
@@ -175,7 +198,12 @@ tr.section-title th {
     <td>Kg</td>
     <td></td>
 </tr>
-<?php endforeach; ?>
+<?php $first = false; endforeach; endforeach; ?>
+<?php else: ?>
+<tr style="border-top: none;">
+    <td colspan="8" style="border-top: none;">Belum ada data stok AT</td>
+</tr>
+<?php endif; ?>
 
 <tr class="font-header">
     <th colspan="3">JUMLAH</th>
@@ -186,8 +214,8 @@ tr.section-title th {
     <td></td>
 </tr>
 
-<tr class="font-header">
-    <th colspan="8">STOK AT FISIK HABIS</th>
+<tr class="font-header" style="<?php echo (mysqli_num_rows($qFisikRows) == 0 ? 'border-top: none;' : ''); ?>">
+    <th colspan="8" style="<?php echo (mysqli_num_rows($qFisikRows) == 0 ? 'border-top: none;' : ''); ?>">STOK AT FISIK HABIS</th>
 </tr>
 
 <?php if(mysqli_num_rows($qFisikRows) > 0): $noF=1; ?>
@@ -214,8 +242,8 @@ tr.section-title th {
 </tr>
 
 <?php else: ?>
-<tr>
-    <td colspan="8">Belum ada data fisik</td>
+<tr style="border-top: none;">
+    <td colspan="8" style="border-top: none;">Belum ada data fisik</td>
 </tr>
 <?php endif; ?>
 
@@ -228,8 +256,8 @@ tr.section-title th {
     <td></td>
 </tr>
 
-<tr class="font-header">
-    <th colspan="8">TAMBAHAN</th>
+<tr class="font-header" style="<?php echo (mysqli_num_rows($qTambahan) == 0 ? 'border-top: none;' : ''); ?>">
+    <th colspan="8" style="<?php echo (mysqli_num_rows($qTambahan) == 0 ? 'border-top: none;' : ''); ?>">TAMBAHAN</th>
 </tr>
 
 <?php if(mysqli_num_rows($qTambahan) > 0): $noT=1; ?>
@@ -243,8 +271,8 @@ tr.section-title th {
 </tr>
 <?php endwhile; ?>
 <?php else: ?>
-<tr>
-    <td colspan="8">Belum ada data tambahan</td>
+<tr style="border-top: none;">
+    <td colspan="8" style="border-top: none;">Belum ada data tambahan</td>
 </tr>
 <?php endif; ?>
 
