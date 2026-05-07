@@ -23,7 +23,7 @@ $tglAkhir = date("Y-m-t", strtotime($tglAwal));
 $qBarang = mysqli_query($conn, "
   SELECT id_barang, kode_barang, nama_barang
   FROM barang
-  WHERE nama_barang LIKE '%briket%'
+  WHERE id_kelompok = 15
   ORDER BY kode_barang ASC
 ");
 
@@ -39,7 +39,7 @@ if($id_barang_briket > 0){
     LIMIT 1
   ");
   if($rb = mysqli_fetch_assoc($qb)){
-    $namaBriket = $rb['kode_barang']." - ".$rb['nama_barang'];
+    $namaBriket = $rb['nama_barang'];
   }
 }
 
@@ -142,7 +142,7 @@ $q = mysqli_query($conn, "
   <div class="card shadow-sm">
     <div class="card-body">
 
-      <a href="../index.php" class="btn btn-info btn-sm mb-2">
+      <a href="../briket/bkbriket.php" class="btn btn-info btn-sm mb-2">
         <i class="fa fa-arrow-left"></i> Back
       </a>
 
@@ -163,7 +163,7 @@ $q = mysqli_query($conn, "
           <?php while($br = mysqli_fetch_assoc($qBarang)): ?>
             <option value="<?= $br['id_barang'] ?>"
               <?= ($id_barang_briket == $br['id_barang']) ? 'selected' : '' ?>>
-              <?= htmlspecialchars($br['kode_barang']." - ".$br['nama_barang']) ?>
+              <?= htmlspecialchars($br['nama_barang']) ?>
             </option>
           <?php endwhile; ?>
         </select>

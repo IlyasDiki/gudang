@@ -131,7 +131,7 @@ $adaSub = mysqli_num_rows($subKelompok);
 
     <div class="col-md-4">
       <label class="form-label">Barang</label>
-      <select name="id_barang" id="barang" class="form-control" required>
+      <select name="id_barang" id="barang" class="form-control" required disabled>
         <option value="">-- Pilih Barang --</option>
         <?php while ($b = mysqli_fetch_assoc($barang)): ?>
           <option 
@@ -162,7 +162,7 @@ $adaSub = mysqli_num_rows($subKelompok);
 
     <div class="col-md-2">
       <label class="form-label">Jumlah</label>
-      <input type="number" name="jumlah" id="jumlah" class="form-control" required>
+      <input type="number" name="jumlah" id="jumlah" class="form-control" required disabled>
     </div>
 
     <div class="col-md-1">
@@ -230,6 +230,60 @@ $adaSub = mysqli_num_rows($subKelompok);
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/select2@4.0.13/dist/js/select2.min.js"></script>
+
+<script>
+$(document).ready(function () {
+    // Event ketika jenis barang dipilih
+    $('#sub_kelompok').on('change', function () {
+        let selectedKelompok = $(this).val();
+        let barangSelect = $('#barang');
+        
+        if (selectedKelompok) {
+            // Enable select barang
+            barangSelect.prop('disabled', false);
+            
+            // Filter dan tampilkan barang sesuai kelompok yang dipilih
+            barangSelect.find('option').each(function () {
+                if ($(this).val() === '') {
+                    $(this).show(); // selalu tampilkan option kosong
+                } else if ($(this).data('kelompok') == selectedKelompok) {
+                    $(this).show();
+                } else {
+                    $(this).hide();
+                }
+            });
+        } else {
+            // Disable barang dan jumlah jika jenis barang tidak dipilih
+            barangSelect.prop('disabled', true).val('');
+            $('#jumlah').prop('disabled', true).val('');
+        }
+    });
+    
+    // Event ketika barang dipilih
+    $('#barang').on('change', function () {
+        let selectedBarang = $(this).val();
+        let jumlahInput = $('#jumlah');
+        let supplierBox = $('#supplierBox');
+        
+        if (selectedBarang) {
+            // Enable input jumlah
+            jumlahInput.prop('disabled', false).focus();
+            
+            // Cek apakah barang perlu supplier
+            let needSupplier = $(this).find('option:selected').data('supplier');
+            if (needSupplier) {
+                supplierBox.show();
+            } else {
+                supplierBox.hide();
+            }
+        } else {
+            // Disable input jumlah jika barang tidak dipilih
+            jumlahInput.prop('disabled', true).val('');
+            supplierBox.hide();
+        }
+    });
+});
+</script>
 
 <script>
 $(document).on("click", ".btn-edit", function () {

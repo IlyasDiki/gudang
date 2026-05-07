@@ -123,13 +123,18 @@ $namaKelompok = $barangInfo['nama_kelompok'] ?? '';
   <link rel="stylesheet" href="../plugins/summernote/summernote-bs4.css">
   <!-- Google Font: Source Sans Pro -->
   <link href="https://fonts.googleapis.com/css?family=Source+Sans+Pro:300,400,400i,700" rel="stylesheet">
+  <style>
+    .content-wrapper {
+      margin-left: 0 !important;
+    }
+  </style>
 </head>
-<body class="hold-transition sidebar-mini layout-fixed">
+<body class="hold-transition layout-fixed">
 <div class="wrapper">
 
 
   <!-- Content -->
-  <div class="content-wrapper p-3">
+  <div class="content-wrapper p-5">
 <a href="barang.php" class="btn btn-secondary mb-2">
   ← Kembali
 </a>

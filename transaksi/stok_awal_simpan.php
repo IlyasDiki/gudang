@@ -45,7 +45,7 @@ for ($i = 0; $i < count($id_barang); $i++) {
     WHERE m.id_jenis = '$idJenis'
     AND md.id_barang = '$idb'
     ".($ids ? " AND md.id_supplier = '$ids'" : "")."
-    AND DATE_FORMAT(m.tanggal,'%Y-%m') = '$tahun-$bulan'
+    AND DATE_FORMAT(m.tanggal,'%Y') = '$tahun'
   ");
 
   if (mysqli_num_rows($qCek) > 0) {
@@ -56,7 +56,7 @@ for ($i = 0; $i < count($id_barang); $i++) {
 
 if ($cekError) {
   echo "<script>
-    alert('Stok awal untuk barang / supplier di bulan ini sudah ada!');
+    alert('Stok awal untuk barang / supplier di tahun ini sudah ada!');
     window.location.href='stok_awal.php';
   </script>";
   exit;
@@ -100,7 +100,7 @@ try {
 
   mysqli_commit($conn);
 
-  header("Location: stok_awal.php?success=1");
+  header("Location: stok_awal.php?bulan=$bulan&tahun=$tahun&success=1");
   exit;
 
 }

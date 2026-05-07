@@ -181,7 +181,7 @@ $data = mysqli_query($conn, $sql);
             </div>
           </div>
 
-          <div class="col-lg-3 col-6">
+          <!-- <div class="col-lg-3 col-6">
             <div class="small-box bg-danger">
               <div class="inner">
                 <h3><?= number_format($stokKritis) ?></h3>
@@ -191,7 +191,7 @@ $data = mysqli_query($conn, $sql);
                 <i class="fas fa-exclamation-triangle"></i>
               </div>
             </div>
-          </div>
+          </div> -->
 
         </div>
 

@@ -1,5 +1,6 @@
 <?php
 require '../config/init.php';
+
 mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
 
 // =======================
@@ -9,6 +10,7 @@ $tanggal     = $_POST['tanggal'] ?? null;
 $idBarang    = $_POST['id_barang'] ?? null;
 $idSupplier  = $_POST['id_supplier'] ?? null;
 $idDetail    = $_POST['id_mutasi_detail'] ?? null;
+$jenisPemakaian = $_POST['jenis_pemakaian'] ?? 'supplier';
 
 $sortir    = floatval($_POST['sortir'] ?? 0);
 $ma        = floatval($_POST['ma'] ?? 0);
@@ -22,7 +24,12 @@ $user = $_SESSION['id_pengguna'] ?? null;
 // =======================
 // VALIDASI
 // =======================
-if (empty($tanggal) || empty($idBarang) || empty($idSupplier) || empty($idDetail)) {
+if (
+    empty($tanggal) ||
+    empty($idBarang) ||
+    empty($idSupplier) ||
+    empty($idDetail)
+) {
     die('Data tidak lengkap');
 }
 
@@ -33,22 +40,74 @@ if ($totalPakai <= 0) {
 }
 
 // =======================
-// CEK SISA STOK BATCH
+// CEK TIPE STOK
 // =======================
-$qCek = mysqli_query($conn, "
-SELECT 
-    md.jumlah,
-    (
-        md.jumlah -
-        IFNULL((
-            SELECT SUM(sortir+ma+aa+b_mentah+air+atp)
-            FROM at_detail
-            WHERE id_mutasi_detail = md.id_detail
-        ),0)
-    ) AS sisa
-FROM mutasi_detail md
-WHERE md.id_detail = '$idDetail'
-");
+$isRepro = strpos($idDetail, 'repro_') === 0;
+
+// =======================
+// CEK STOK SUPPLIER
+// =======================
+if (!$isRepro) {
+
+    $realId = str_replace('supplier_', '', $idDetail);
+
+    $qCek = mysqli_query($conn, "
+    SELECT 
+        md.jumlah,
+
+        (
+            md.jumlah -
+
+            IFNULL((
+                SELECT SUM(sortir+ma+aa+b_mentah+air+atp)
+                FROM at_detail
+                WHERE id_mutasi_detail = 'supplier_$realId'
+            ),0)
+
+        ) AS sisa
+
+    FROM mutasi_detail md
+    WHERE md.id_detail = '$realId'
+    ");
+
+} else {
+
+    // =======================
+    // CEK STOK REPRO
+    // =======================
+
+    $realId = str_replace('repro_', '', $idDetail);
+
+    $qCek = mysqli_query($conn, "
+
+    SELECT
+
+        ((bm.krg * 25) + bm.add_kg) AS qty,
+
+        (
+            ((bm.krg * 25) + bm.add_kg)
+
+            -
+
+            IFNULL((
+                SELECT SUM(sortir+ma+aa+b_mentah+air+atp)
+                FROM at_detail
+                WHERE id_mutasi_detail = 'repro_$realId'
+            ),0)
+
+        ) AS sisa
+
+    FROM bkbriket_mutasi bm
+
+    JOIN bkbriket b
+    ON b.id_bk = bm.id_bk
+
+    WHERE bm.id_mutasi = '$realId'
+    AND bm.jenis = 'REPRO'
+    AND b.status = 'KARANTINA'
+
+    ");
+}
 
 $data = mysqli_fetch_assoc($qCek);
 
@@ -64,8 +123,11 @@ if ($totalPakai > $data['sisa']) {
 // JENIS MUTASI
 // =======================
 $qJenis = mysqli_query($conn,"
-SELECT id_jenis FROM jenis_mutasi WHERE kode_jenis='AT'
+SELECT id_jenis 
+FROM jenis_mutasi 
+WHERE kode_jenis='AT'
 ");
+
 $idJenis = mysqli_fetch_assoc($qJenis)['id_jenis'];
 
 // =======================
@@ -75,19 +137,36 @@ mysqli_begin_transaction($conn);
 
 try {
 
-    // HEADER
+    // =======================
+    // INSERT HEADER MUTASI
+    // =======================
     mysqli_query($conn,"
     INSERT INTO mutasi
-    (tanggal, id_jenis, keterangan, dibuat_oleh, id_supplier)
+    (
+        tanggal,
+        id_jenis,
+        keterangan,
+        dibuat_oleh,
+        id_supplier
+    )
     VALUES
-    ('$tanggal','$idJenis','Pemakaian AT','$user','$idSupplier')
+    (
+        '$tanggal',
+        '$idJenis',
+        'Pemakaian AT',
+        '$user',
+        '$idSupplier'
+    )
     ");
 
-    // DETAIL (TANPA FIFO)
+    // =======================
+    // INSERT DETAIL
+    // =======================
     mysqli_query($conn,"
     INSERT INTO at_detail
     (
         id_mutasi_detail,
+        jenis_pemakaian,
         id_barang,
         id_supplier,
         sortir,
@@ -101,6 +180,7 @@ try {
     VALUES
     (
         '$idDetail',
+        '$jenisPemakaian',
         '$idBarang',
         '$idSupplier',
         '$sortir',
@@ -121,5 +201,6 @@ try {
 } catch (Exception $e) {
 
     mysqli_rollback($conn);
+
     die("Gagal simpan: " . $e->getMessage());
 }

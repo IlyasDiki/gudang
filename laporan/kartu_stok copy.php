@@ -331,13 +331,9 @@ SELECT
   s.alamat,
 
   /* =========================
-     STOK AWAL (MUTASI + ATP - MIXER)
+     STOK AWAL (MUTASI)
   ========================= */
-  (
-    IFNULL(sa.stok_awal,0)
-    + IFNULL(atp_awal.atp_sebelum,0)
-    - IFNULL(mx_awal.mixer_sebelum,0)
-  ) AS stok_awal,
+  IFNULL(sa.stok_awal,0) AS stok_awal,
 
   /* =========================
      MASUK TOTAL
@@ -362,8 +358,6 @@ SELECT
   ========================= */
   (
     IFNULL(sa.stok_awal,0)
-    + IFNULL(atp_awal.atp_sebelum,0)
-    - IFNULL(mx_awal.mixer_sebelum,0)
     + IFNULL(ms.masuk,0)
     + IFNULL(atp.masuk,0)
     - IFNULL(kl.keluar,0)
@@ -373,14 +367,14 @@ SELECT
 FROM supplier s
 
 /* =========================
-   STOK AWAL (MUTASI + ATP + MIXER)
+   STOK AWAL (MUTASI)
 ========================= */
 LEFT JOIN (
   SELECT 
     md.id_supplier,
 
     CASE 
-      /* CEK ADA STOK AWAL BULAN INI DI MUTASI */
+      /* CEK ADA STOK AWAL */
       WHEN SUM(
         CASE 
           WHEN (jm.tipe = 'STOKAWAL' OR m.jenis='AWAL')
@@ -390,7 +384,7 @@ LEFT JOIN (
       ) > 0
 
       THEN 
-        /* PAKAI STOK AWAL DARI MUTASI */
+        /* PAKAI STOK AWAL */
         SUM(
           CASE 
             WHEN (jm.tipe = 'STOKAWAL' OR m.jenis='AWAL')
@@ -401,7 +395,7 @@ LEFT JOIN (
         )
 
       ELSE 
-        /* PAKAI SALDO SEBELUMNYA = MUTASI + ATP - MIXER */
+        /* PAKAI SALDO SEBELUMNYA */
         SUM(
           CASE 
             WHEN m.tanggal < '$tglAwal'
@@ -415,9 +409,7 @@ LEFT JOIN (
             ELSE 0
           END
         )
-    END AS stok_awal,
-    
-    md.id_supplier AS join_id_supplier
+    END AS stok_awal
 
   FROM mutasi m
   JOIN mutasi_detail md ON md.id_mutasi = m.id_mutasi
@@ -428,31 +420,6 @@ LEFT JOIN (
 
   GROUP BY md.id_supplier
 ) sa ON sa.id_supplier = s.id_supplier
-
-/* =========================
-   STOK AWAL TAMBAHAN ATP (sebelum bulan)
-========================= */
-LEFT JOIN (
-  SELECT 
-    a.id_supplier,
-    SUM(a.atp) AS atp_sebelum
-  FROM at_detail a
-  WHERE a.tanggal < '$tglAwal'
-  GROUP BY a.id_supplier
-) atp_awal ON atp_awal.id_supplier = s.id_supplier
-
-/* =========================
-   STOK AWAL KURANG MIXER (sebelum bulan)
-========================= */
-LEFT JOIN (
-  SELECT 
-    p.id_supplier,
-    SUM(pd.mixer) AS mixer_sebelum
-  FROM produksi p
-  JOIN produksi_detail pd ON pd.id_produksi = p.id_produksi
-  WHERE p.tanggal < '$tglAwal'
-  GROUP BY p.id_supplier
-) mx_awal ON mx_awal.id_supplier = s.id_supplier
 
 /* =========================
    MASUK (MUTASI)

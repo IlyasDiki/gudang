@@ -1,6 +1,9 @@
 <?php
 require '../config/init.php';
 
+$bulan = $_GET['bulan'] ?? date('m');
+$tahun = $_GET['tahun'] ?? date('Y');
+
 $qBarang = mysqli_query($conn, "
 SELECT 
   b.id_barang, 
@@ -18,6 +21,23 @@ SELECT id_supplier, nama_supplier
 FROM supplier
 ORDER BY id_supplier
 ");
+
+$qExistingStokAwal = mysqli_query($conn, "
+SELECT md.id_barang, COALESCE(md.id_supplier, 0) AS id_supplier, YEAR(m.tanggal) AS tahun
+FROM mutasi_detail md
+JOIN mutasi m ON m.id_mutasi = md.id_mutasi
+JOIN jenis_mutasi jm ON jm.id_jenis = m.id_jenis
+WHERE jm.tipe = 'STOKAWAL'
+");
+
+$existingStokAwal = [];
+while ($row = mysqli_fetch_assoc($qExistingStokAwal)) {
+  $y = $row['tahun'];
+  $b = $row['id_barang'];
+  $s = $row['id_supplier'];
+  $existingStokAwal[$y][$b][] = $s;
+}
+
 ?>
 
 <!DOCTYPE html>
@@ -55,45 +75,55 @@ include "../layout/sidebar.php";
 <h3 class="card-title">Stok Awal Barang</h3>
 </div>
 
-<form method="post" action="stok_awal_simpan.php" id="formStokAwal">
-
 <div class="card-body">
 
-<div class="row mb-3">
-<div class="col-md-4">
-<label>Tanggal Stok Awal</label><br>
+<?php if(isset($_GET['success'])){ ?>
+<div class="alert alert-success alert-dismissible">
+  <button type="button" class="close" data-dismiss="alert">&times;</button>
+  Stok awal berhasil disimpan!
+</div>
+<?php } ?>
+
+<form method="post" action="stok_awal_simpan.php" id="formStokAwal"> 
+<label>Pilih Bulan dan Tahun untuk Stok Awal</label><br>
 <div class="row align-items-end">
-  <div class="col-md-4">
+  <div class="col-md-3">
   <label>Bulan</label>
   <select name="bulan" class="form-control" required>
     <option value="">-- Pilih Bulan --</option>
-    <option value="01">Januari</option>
-    <option value="02">Februari</option>
-    <option value="03">Maret</option>
-    <option value="04">April</option>
-    <option value="05">Mei</option>
-    <option value="06">Juni</option>
-    <option value="07">Juli</option>
-    <option value="08">Agustus</option>
-    <option value="09">September</option>
-    <option value="10">Oktober</option>
-    <option value="11">November</option>
-    <option value="12">Desember</option>
+    <?php
+    $bulanOptions = [
+      '01' => 'Januari',
+      '02' => 'Februari',
+      '03' => 'Maret',
+      '04' => 'April',
+      '05' => 'Mei',
+      '06' => 'Juni',
+      '07' => 'Juli',
+      '08' => 'Agustus',
+      '09' => 'September',
+      '10' => 'Oktober',
+      '11' => 'November',
+      '12' => 'Desember'
+    ];
+    foreach ($bulanOptions as $val => $nama) {
+      $selected = ($val == $bulan) ? 'selected' : '';
+      echo "<option value='$val' $selected>$nama</option>";
+    }
+    ?>
   </select>
 </div>
-<div class="col-md-4">
+<div class="col-md-3">
   <label>Tahun</label>
   <select name="tahun" class="form-control" required>
     <?php
     $now = date('Y');
     for ($i = $now-1; $i <= $now+1; $i++) {
-      echo "<option value='$i'>$i</option>";
+      $selected = ($i == $tahun) ? 'selected' : '';
+      echo "<option value='$i' $selected>$i</option>";
     }
     ?>
   </select>
-</div>
-</div>
-
 </div>
 </div>
 
@@ -119,6 +149,9 @@ data-supplier="<?= $b['pakai_supplier'] ?>"
 <?php } ?>
 
 </select>
+<small id="stockWarning" class="text-danger d-none">
+  Stok awal untuk barang ini sudah ada di tahun yang dipilih.
+</small>
 </div>
 
 <div class="col-md-3" id="supplierBox" style="display:none;">
@@ -212,6 +245,29 @@ theme: 'bootstrap4'
 });
 
 let nomor = 0;
+
+const existingStokAwal = <?= json_encode($existingStokAwal) ?>;
+
+function checkStokAwalWarning() {
+  const idBarang = $("#barangSelect").val();
+  const tahunPilihan = $("select[name='tahun']").val();
+  const idSupplier = $("#supplierSelect").val() || '0';
+  const warning = $("#stockWarning");
+
+  if (!idBarang || !tahunPilihan) {
+    warning.addClass('d-none');
+    return;
+  }
+
+  const tahunData = existingStokAwal[tahunPilihan] || {};
+  const supplierList = tahunData[idBarang] || [];
+
+  if (supplierList.includes(parseInt(idSupplier, 10))) {
+    warning.removeClass('d-none');
+  } else {
+    warning.addClass('d-none');
+  }
+}
 
 /* ============================= */
 /* SHOW SUPPLIER IF NEEDED */
@@ -349,6 +405,15 @@ nomor = 0;
 
 }
 });
+
+$("#supplierSelect, select[name='tahun']").on("change", function(){
+  checkStokAwalWarning();
+});
+
+$("#barangSelect").on("change", function(){
+  checkStokAwalWarning();
+});
+
 });
 
 </script>

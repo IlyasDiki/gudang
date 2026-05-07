@@ -1,4 +1,5 @@
 <?php
+
 require '../config/init.php';
 require_once "../dompdf/autoload.inc.php";
 use Dompdf\Dompdf;

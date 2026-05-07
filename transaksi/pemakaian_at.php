@@ -17,7 +17,10 @@ $idBarang = $barang['id_barang'] ?? 0;
 $qSupplier = mysqli_query($conn, "
     SELECT id_supplier, nama_supplier
     FROM supplier
-    ORDER BY nama_supplier
+    WHERE tipe = 'external' OR nama_supplier = 'REPRO BRIKET'
+    ORDER BY 
+        (nama_supplier = 'REPRO BRIKET') ASC,
+        nama_supplier ASC
 ");
 ?>
 
@@ -52,8 +55,13 @@ include "../layout/sidebar.php";
 <div class="card-header">
     <h3 class="card-title">Input Pemakaian AT</h3>
 
+    <a href="pemakaian_at_kelola.php">
+    <button class="btn btn-warning btn-sm float-right mr-2">
+        ⚙️ Kelola / Koreksi
+    </button>
+</a>
     <a href="../laporan/pemakaian_at_laporan.php">
-        <button class="btn btn-primary btn-sm float-right">
+        <button class="btn btn-primary btn-sm float-right mr-1">
             📊 Lihat Laporan
         </button>
     </a>
@@ -114,6 +122,7 @@ include "../layout/sidebar.php";
 <div id="formPemakaian" style="display:none;">
 
     <div class="row">
+        <input type="hidden" name="jenis_pemakaian" id="jenis_pemakaian">
         <div class="col-md-2">
             <label>Sortir</label>
             <input type="number" step="0.01" name="sortir" value="0"
@@ -204,9 +213,16 @@ $('#id_supplier').change(function () {
             let html = '<option value="">-- Pilih Sumber Stok --</option>';
 
             data.stok.forEach(row => {
-                html += `<option value="${row.id}" data-saldo="${row.saldo}">
-                            ${row.label} (${row.saldo} kg)
-                         </option>`;
+
+            html += `<option 
+                        value="${row.id}" 
+                        data-saldo="${row.saldo}"
+                        data-tipe="${row.tipe}">
+
+                        ${row.label} (${parseFloat(row.saldo).toFixed(2)} kg)
+
+                    </option>
+                `;
             });
 
             $('#sumber_stok').html(html);
@@ -215,14 +231,18 @@ $('#id_supplier').change(function () {
 });
 
 
+/* ========================= PILIH SUMBER STOK ========================= */
 $('#sumber_stok').change(function () {
 
-    let id = $(this).val();
-    let saldo = $(this).find(':selected').data('saldo');
+    let selected = $(this).find(':selected');
 
-    $('#id_mutasi_detail').val(id);
+    let saldo = selected.data('saldo');
+    let tipe  = selected.data('tipe');
 
-    if (!id) {
+    $('#id_mutasi_detail').val($(this).val());
+    $('#jenis_pemakaian').val(tipe);
+
+    if (!$(this).val()) {
         $('#formPemakaian').hide();
         $('#saldo').val(0);
         return;

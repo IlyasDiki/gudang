@@ -4,46 +4,34 @@ require_once __DIR__ . '/../config/init.php';
 /* =========================
    FILTER
 ========================= */
-$bulan = $_GET['bulan'] ?? '';
+$bulan         = $_GET['bulan'] ?? date('Y-m');
 $id_barang_atp = $_GET['id_barang_atp'] ?? '';
 $id_supplier   = $_GET['id_supplier'] ?? '';
 
-$whereTanggal = "";
-
-if (!empty($bulan)) {
-    $awal  = $bulan . '-01';
-    $akhir = date('Y-m-t', strtotime($awal));
-    $whereTanggal = " AND p.tanggal BETWEEN '$awal' AND '$akhir'";
-}
+$awal  = $bulan . '-01';
+$akhir = date('Y-m-t', strtotime($awal));
 
 /* =========================
    BARANG ATP
 ========================= */
-$qBarangATP = mysqli_query($conn, "
-SELECT id_barang, nama_barang
-FROM barang
-WHERE id_kelompok = (
-    SELECT id_kelompok 
-    FROM kelompok_barang 
-    WHERE nama_kelompok='Powder'
-)
-LIMIT 1
+$barang = mysqli_query($conn, "
+    SELECT id_barang, nama_barang 
+    FROM barang 
+    WHERE id_kelompok = (
+        SELECT id_kelompok 
+        FROM kelompok_barang 
+        WHERE nama_kelompok='Powder'
+    )
+    ORDER BY nama_barang
 ");
-
-$dataBarangATP = mysqli_fetch_assoc($qBarangATP);
-$idBarangATP   = $dataBarangATP['id_barang'];
-$namaBarangATP = $dataBarangATP['nama_barang'];
 
 /* =========================
    SUPPLIER
 ========================= */
 $supplier = mysqli_query($conn, "
-    SELECT id_supplier, nama_supplier
-    FROM supplier
-    WHERE tipe = 'external' OR nama_supplier = 'REPRO BRIKET'
-    ORDER BY 
-        (nama_supplier = 'REPRO BRIKET') ASC,
-        nama_supplier ASC
+    SELECT id_supplier, nama_supplier 
+    FROM supplier 
+    ORDER BY nama_supplier
 ");
 
 /* =========================
@@ -59,10 +47,9 @@ $qProduksi = mysqli_query($conn, "
         p.keterangan
     FROM produksi p
     JOIN barang b ON b.id_barang = p.id_barang_atp
-    JOIN supplier s ON s.id_supplier = p.id_supplier AND s.tipe = 'external'
+    LEFT JOIN supplier s ON s.id_supplier = p.id_supplier
     LEFT JOIN produksi_detail pd ON pd.id_produksi = p.id_produksi
-    WHERE 1=1
-    $whereTanggal
+    WHERE p.tanggal BETWEEN '$awal' AND '$akhir'
     " . (!empty($id_barang_atp) ? " AND p.id_barang_atp='$id_barang_atp'" : "") . "
     " . (!empty($id_supplier) ? " AND p.id_supplier='$id_supplier'" : "") . "
     GROUP BY p.id_produksi
@@ -110,8 +97,14 @@ $qProduksi = mysqli_query($conn, "
 
                         <div class="col-md-3">
                             <label>ATP</label>
-                            <input type="text" class="form-control form-control-sm" value="<?= htmlspecialchars($namaBarangATP) ?>" readonly>
-                            <input type="hidden" name="id_barang_atp" id="id_barang_atp" value="<?= $idBarangATP ?>">
+                            <select name="id_barang_atp" id="id_barang_atp" class="form-control form-control-sm" required>
+                                <option value="">-- Pilih --</option>
+                                <?php while($b=mysqli_fetch_assoc($barang)): ?>
+                                    <option value="<?= $b['id_barang'] ?>">
+                                        <?= htmlspecialchars($b['nama_barang']) ?>
+                                    </option>
+                                <?php endwhile; ?>
+                            </select>
                         </div>
 
                         <div class="col-md-3">
@@ -179,52 +172,14 @@ $qProduksi = mysqli_query($conn, "
             </div>
         </form>
 
-        
         <!-- TABLE -->
         <div class="card">
             <div class="card-body table-responsive">
-
-                <form method="GET" class="mb-3">
-                    <div class="row">
-                        <div class="col-md-3">
-                            <label>Bulan</label>
-                            <input type="month" name="bulan" 
-                                value="<?= htmlspecialchars($bulan) ?>"
-                                class="form-control form-control-sm">
-                        </div>
-
-                        <div class="col-md-3">
-                            <label>Supplier</label>
-                            <select name="id_supplier" class="form-control form-control-sm">
-                                <option value="">-- Semua Supplier --</option>
-                                <?php 
-                                mysqli_data_seek($supplier, 0);
-                                while($s=mysqli_fetch_assoc($supplier)): ?>
-                                <option value="<?= $s['id_supplier'] ?>"
-                                    <?= ($id_supplier==$s['id_supplier']?'selected':'') ?>>
-                                    <?= htmlspecialchars($s['nama_supplier']) ?>
-                                </option>
-                                <?php endwhile; ?>
-                            </select>
-                        </div>
-
-                        <div class="col-md-3 d-flex align-items-end">
-                            <button class="btn btn-primary btn-sm mr-2">Filter</button>
-                            <a href="produksi.php" class="btn btn-secondary btn-sm">Reset</a>
-                        </div>
-                    </div>
-                </form>
-
-                <?php if(empty($bulan) && empty($id_barang_atp) && empty($id_supplier)): ?>
-                    <small class="text-muted">Menampilkan semua data produksi</small>
-                <?php else: ?>
-                    <small class="text-success">Filter aktif</small>
-                <?php endif; ?>
-
                 <table class="table table-bordered table-sm">
                     <thead class="bg-light">
                         <tr>
                             <th>Tanggal</th>
+                            <th>ATP</th>
                             <th>Supplier</th>
                             <th class="text-right">Mixer</th>
                             <th>Keterangan</th>
@@ -234,6 +189,7 @@ $qProduksi = mysqli_query($conn, "
                         <?php while($r=mysqli_fetch_assoc($qProduksi)): ?>
                         <tr>
                             <td><?= date('d-m-Y', strtotime($r['tanggal'])) ?></td>
+                            <td><?= htmlspecialchars($r['nama_barang']) ?></td>
                             <td><?= htmlspecialchars($r['nama_supplier'] ?? '-') ?></td>
                             <td class="text-right"><?= number_format($r['mixer'],2) ?></td>
                             <td><?= htmlspecialchars($r['keterangan'] ?? '') ?></td>

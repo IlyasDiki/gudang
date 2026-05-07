@@ -90,9 +90,27 @@ $qProd = mysqli_query($conn, "
   FROM produksi p
   JOIN produksi_detail pd ON pd.id_produksi = p.id_produksi
   WHERE p.id_barang_atp = '$id_barang_powder'
+  AND DATE(p.tanggal) BETWEEN '$tglAwal' AND '$tglAkhir'  -- 🔥 INI WAJIB
   ". (!empty($id_supplier) ? " AND p.id_supplier = '$id_supplier'" : "") . "
   ORDER BY p.tanggal ASC
 ");
+
+$qSaldoAwalProd = mysqli_query($conn, "
+  SELECT 
+    IFNULL(SUM(a.atp),0) 
+    - IFNULL((
+        SELECT SUM(pd.mixer)
+        FROM produksi_detail pd
+        JOIN produksi p ON p.id_produksi = pd.id_produksi
+        WHERE p.tanggal < '$tglAwal'
+        ". (!empty($id_supplier) ? " AND p.id_supplier = '$id_supplier'" : "") . "
+    ),0) AS saldo_awal
+  FROM at_detail a
+  WHERE a.tanggal < '$tglAwal'
+  ". (!empty($id_supplier) ? " AND a.id_supplier = '$id_supplier'" : "") . "
+");
+
+$saldoAwalProd = mysqli_fetch_assoc($qSaldoAwalProd)['saldo_awal'] ?? 0;
 
 $dataProd = [];
 while ($row = mysqli_fetch_assoc($qProd)) {
@@ -340,7 +358,7 @@ $judulBulan = ($namaBulan[$bulan] ?? $bulan) . " " . $tahun;
 
       /* SALDO PRODUKSI */
       if (!$initProd) {
-        $saldoProd = (float)$total['atp'];
+        $saldoProd = $saldoAwalProd + (float)$total['atp']; // 🔥 FIX
         $initProd = true;
       }
 
