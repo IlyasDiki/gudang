@@ -105,7 +105,7 @@ $parent = mysqli_query($conn, "
               <a href="kelompok_barang_hapus.php?id=<?= $row['id_kelompok']; ?>"
                  onclick="return confirm('Hapus data ini?')"
                  class="btn btn-danger btn-sm">
-                Hapus
+                 <i class="fa fa-trash"></i>
               </a>
             </td>
           </tr>

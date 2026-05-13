@@ -42,6 +42,13 @@ UNION ALL
   $idSupplierFilterTrans
   AND MONTH(t.tanggal_terima)='$bulan'
   AND YEAR(t.tanggal_terima)='$tahun'
+  AND NOT EXISTS (
+    SELECT 1
+    FROM mutasi m2
+    JOIN mutasi_detail md2 ON md2.id_mutasi = m2.id_mutasi
+    WHERE m2.id_transaksi = td.id_transaksi
+      AND md2.id_barang = td.id_barang
+  )
 )
 ORDER BY tanggal ASC
 ");
@@ -76,7 +83,14 @@ SELECT
     JOIN transaksi t ON t.id_transaksi = td.id_transaksi
     JOIN jenis_transaksi jt ON jt.id_jenist = t.jenis_transaksi
     WHERE td.id_barang='$id_barang'
-    AND DATE(t.tanggal_terima) < '$tahun-$bulan-01'
+      AND DATE(t.tanggal_terima) < '$tahun-$bulan-01'
+      AND NOT EXISTS (
+        SELECT 1
+        FROM mutasi m2
+        JOIN mutasi_detail md2 ON md2.id_mutasi = m2.id_mutasi
+        WHERE m2.id_transaksi = td.id_transaksi
+          AND md2.id_barang = td.id_barang
+      )
   )
 AS saldo_awal
 ");
@@ -247,60 +261,8 @@ $namaKelompok = $barangInfo['nama_kelompok'] ?? '';
 
 </div>
 
-<!-- MODAL INPUT PEMBELIAN -->
-<div class="modal fade" id="modalPembelian">
-  <div class="modal-dialog modal-lg">
-    <form method="post" action="pembelian_simpan.php">
-      <div class="modal-content">
 
-        <div class="modal-header">
-          <h4 class="modal-title">Input Pembelian</h4>
-          <button type="button" class="close" data-dismiss="modal">&times;</button>
-        </div>
-
-        <div class="modal-body">
-
-          <div class="row">
-            <div class="col-md-4">
-              <label>Tanggal Terima</label>
-              <input type="date" name="tanggal_terima" class="form-control" required>
-            </div>
-
-            <div class="col-md-4">
-              <label>Supplier</label>
-              <select name="id_supplier" class="form-control" required>
-                <option value="">-- Pilih Supplier --</option>
-                <?php while($s=mysqli_fetch_assoc($supplier)): ?>
-                  <option value="<?= $s['id_supplier'] ?>">
-                    <?= $s['nama_supplier'] ?>
-                  </option>
-                <?php endwhile ?>
-              </select>
-            </div>
-
-            <div class="col-md-4">
-              <label>Jenis Pembelian</label>
-              <select name="jenis_pembelian" class="form-control" required>
-                <option value="BAHAN_BAKU">Bahan Baku</option>
-                <option value="PENDUKUNG">Pendukung</option>
-                <option value="PACKAGING">Packaging</option>
-              </select>
-            </div>
-          </div>
-
-        </div>
-
-        <div class="modal-footer">
-          <button type="submit" class="btn btn-success">Simpan</button>
-          <button type="button" class="btn btn-secondary" data-dismiss="modal">Batal</button>
-        </div>
-
-      </div>
-    </form>
   </div>
-</div>
-  </div>
-<?php include "../footer.php"; ?>
 
   <!-- Control Sidebar -->
   <aside class="control-sidebar control-sidebar-dark">

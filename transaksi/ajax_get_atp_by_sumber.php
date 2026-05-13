@@ -88,8 +88,8 @@ if (!$isRepro) {
     while ($row = mysqli_fetch_assoc($q)) {
 
         $data[] = [
-            'id'            => 'supplier_' . $row['id_detail'],
-            'real_id'       => $row['id_detail'],
+            'id'            => (int) $row['id_detail'],
+            'real_id'       => (int) $row['id_detail'],
             'tipe'          => 'supplier',
 
             'label'         => date('d M Y', strtotime($row['tanggal'])) . ' | SUPPLIER',
@@ -162,8 +162,8 @@ if ($isRepro) {
     while ($row = mysqli_fetch_assoc($qRepro)) {
 
         $data[] = [
-            'id'            => 'repro_' . $row['id_at'],
-            'real_id'       => 'repro_' . $row['id_at'],
+            'id'            => (int) $row['id_at'],
+            'real_id'       => (int) $row['id_at'],
             'tipe'          => 'repro',
 
             'label'         => date('d M Y', strtotime($row['tanggal'])) . ' | REPRO ATP',

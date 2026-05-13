@@ -9,7 +9,7 @@
   <ul class="navbar-nav">
     <li class="nav-item">
       <a class="nav-link" data-widget="pushmenu" href="#">
-        <i class="fas fa-bars"></i>
+        <i class="fas fa-bars mr-5"></i> <b>Sistem Informasi Pengelolaan Briket PT DIAN CIPTA SEJAHTERA</b>
       </a>
     </li>
   </ul>

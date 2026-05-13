@@ -583,7 +583,7 @@ body{
             <div class="monitor-item">
               <div class="monitor-left">
                 <div class="monitor-icon bg-purple">
-                  <i class="fas fa-cube"></i>
+                  <i class="fas fa-blender"></i>
                 </div>
 
                 <div>
@@ -713,6 +713,20 @@ body{
         </div>
       </div>
     </div>
+
+    <!-- GRAFIK -->
+    <div class="card">
+
+      <div class="card-header">
+        <h3 class="card-title">
+          <i class="fas fa-chart-line mr-1"></i>
+          Grafik Barang Masuk vs Keluar (7 Hari)
+        </h3>
+      </div>
+
+      <div class="card-body">
+        <canvas id="grafikMutasi" height="140"></canvas>
+      </div>
 
     </div>
 

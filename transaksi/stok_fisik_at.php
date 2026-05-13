@@ -115,23 +115,44 @@ include "../layout/sidebar.php";
 <tr>
     <th>Tanggal</th>
     <th>Supplier</th>
-    <th>Jumlah (Kg)</th>
+    <th width="120">Jumlah (Kg)</th>
     <th>Keterangan</th>
+    <th width="140">Aksi</th>
 </tr>
 </thead>
 
 <tbody>
 <?php if(mysqli_num_rows($qLast)==0): ?>
 <tr>
-    <td colspan="4" class="text-center">Belum ada data</td>
+    <td colspan="5" class="text-center">Belum ada data</td>
 </tr>
 <?php else: ?>
 <?php while($r = mysqli_fetch_assoc($qLast)): ?>
 <tr>
     <td><?= date('d-M-Y', strtotime($r['tanggal'])) ?></td>
     <td><?= htmlspecialchars($r['nama_supplier'] ?? '-') ?></td>
-    <td><?= number_format($r['jumlah'],2) ?></td>
+    <td>
+        <div class="view-jumlah-<?= $r['id_stok_fisik'] ?> text-right">
+            <?= number_format($r['jumlah'],2) ?>
+        </div>
+        <div class="edit-jumlah-<?= $r['id_stok_fisik'] ?>" style="display:none;">
+            <input type="number" step="0.01" min="0" class="form-control form-control-sm jumlah-input" value="<?= $r['jumlah'] ?>">
+        </div>
+    </td>
     <td><?= htmlspecialchars($r['keterangan']) ?></td>
+    <td>
+        <button type="button" class="btn btn-warning btn-xs btn-edit" data-id="<?= $r['id_stok_fisik'] ?>">
+            <i class="fa fa-edit"></i> Edit
+        </button>
+        <button type="button" class="btn btn-success btn-xs btn-update" data-id="<?= $r['id_stok_fisik'] ?>" style="display:none;">
+            <i class="fa fa-save"></i> Update
+        </button>
+        <a href="stok_fisik_at_hapus.php?id=<?= $r['id_stok_fisik'] ?>"
+           class="btn btn-danger btn-xs"
+           onclick="return confirm('Hapus data?')">
+            <i class="fa fa-trash"></i>
+        </a>
+    </td>
 </tr>
 <?php endwhile; ?>
 <?php endif; ?>
@@ -152,6 +173,33 @@ include "../layout/sidebar.php";
 <script src="../plugins/jquery/jquery.min.js"></script>
 <script src="../plugins/bootstrap/js/bootstrap.bundle.min.js"></script>
 <script src="../dist/js/adminlte.min.js"></script>
+
+<script>
+  $('.btn-edit').click(function() {
+    let id = $(this).data('id');
+    $('.view-jumlah-' + id).hide();
+    $('.edit-jumlah-' + id).show();
+    $(this).hide();
+    $('.btn-update[data-id="' + id + '"]').show();
+  });
+
+  $('.btn-update').click(function() {
+    let id = $(this).data('id');
+    let jumlah = $('.edit-jumlah-' + id + ' .jumlah-input').val();
+
+    if (jumlah === '') {
+      alert('Jumlah tidak boleh kosong');
+      return;
+    }
+
+    $.post('stok_fisik_at_update.php', {
+      id_stok_fisik: id,
+      jumlah: jumlah
+    }, function() {
+      location.reload();
+    });
+  });
+</script>
 
 </body>
 </html>

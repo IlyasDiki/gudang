@@ -16,10 +16,17 @@ $tglAkhir = date('Y-m-t', strtotime($tglAwal));
    AMBIL DATA PEMAKAIAN AT
    ========================== */
 $q = mysqli_query($conn, "
-  SELECT
+SELECT
     d.tanggal,
     d.id_mutasi_detail,
-    md.jumlah AS stok_sumber,
+
+    CASE
+        WHEN bm.jenis = 'REPRO'
+        THEN ((bm.krg * 25) + bm.add_kg)
+
+        ELSE md.jumlah
+    END AS stok_sumber,
+
     b.nama_barang,
     d.sortir,
     d.ma,
@@ -28,17 +35,26 @@ $q = mysqli_query($conn, "
     d.air,
     d.atp,
     k.nama_kelompok
-  FROM at_detail d
-  JOIN barang b ON b.id_barang = d.id_barang
-  JOIN kelompok_barang k ON k.id_kelompok = b.id_kelompok
 
-  LEFT JOIN mutasi_detail md 
+FROM at_detail d
+
+JOIN barang b 
+    ON b.id_barang = d.id_barang
+
+JOIN kelompok_barang k 
+    ON k.id_kelompok = b.id_kelompok
+
+LEFT JOIN mutasi_detail md 
     ON md.id_detail = d.id_mutasi_detail
 
-  WHERE DATE(d.tanggal) BETWEEN '$tglAwal' AND '$tglAkhir'
-  AND d.id_barang = '$id_barang_arang'
-  ". (!empty($id_supplier) ? " AND d.id_supplier = '$id_supplier'" : "") . "
-  ORDER BY d.id_mutasi_detail, d.tanggal ASC
+LEFT JOIN bkbriket_mutasi bm
+    ON bm.id_mutasi = d.id_mutasi_detail
+
+WHERE DATE(d.tanggal) BETWEEN '$tglAwal' AND '$tglAkhir'
+AND d.id_barang = '$id_barang_arang'
+". (!empty($id_supplier) ? " AND d.id_supplier = '$id_supplier'" : "") . "
+
+ORDER BY d.id_mutasi_detail, d.tanggal ASC
 ");
 
 $qListBarang = mysqli_query($conn, "

@@ -92,7 +92,7 @@ $data = mysqli_query($conn, "SELECT * FROM supplier ORDER BY nama_supplier ASC")
         </button>
         <a href="supplier_hapus.php?id=<?= $row['id_supplier'] ?>"
            class="btn btn-danger btn-sm"
-           onclick="return confirm('Hapus data?')">Hapus</a>
+           onclick="return confirm('Hapus data?')"> <i class="fa fa-trash"></i></a>
       </td>
     </tr>
     <?php endwhile ?>

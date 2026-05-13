@@ -135,6 +135,7 @@ $qLast = mysqli_query($conn,"
     <th>Nama Barang</th>
     <th>Jumlah</th>
     <th>Keterangan</th>
+    <th width="140">Aksi</th>
 </tr>
 </thead>
 <tbody>
@@ -148,8 +149,28 @@ $qLast = mysqli_query($conn,"
 <tr>
     <td><?= date('d-M-Y', strtotime($r['tanggal'])) ?></td>
     <td><?= htmlspecialchars($r['nama_barang'] ?? '') ?></td>
-    <td><?= number_format($r['jumlah'],2) ?></td>
+    <td>
+        <div class="view-jumlah-<?= $r['id_tambahan'] ?> text-right">
+            <?= number_format($r['jumlah'],2) ?>
+        </div>
+        <div class="edit-jumlah-<?= $r['id_tambahan'] ?>" style="display:none;">
+            <input type="number" step="0.01" min="0" class="form-control form-control-sm jumlah-input" value="<?= $r['jumlah'] ?>">
+        </div>
+    </td>
     <td><?= htmlspecialchars($r['keterangan']) ?></td>
+    <td>
+        <button type="button" class="btn btn-warning btn-xs btn-edit" data-id="<?= $r['id_tambahan'] ?>">
+            <i class="fa fa-edit"></i> Edit
+        </button>
+        <button type="button" class="btn btn-success btn-xs btn-update" data-id="<?= $r['id_tambahan'] ?>" style="display:none;">
+            <i class="fa fa-save"></i> Update
+        </button>
+        <a href="tambahan_pemakaian_at_hapus.php?id=<?= $r['id_tambahan'] ?>"
+           class="btn btn-danger btn-xs"
+           onclick="return confirm('Hapus data?')">
+            <i class="fa fa-trash"></i>
+        </a>
+    </td>
 </tr>
 <?php endwhile; ?>
 <?php endif; ?>
@@ -210,6 +231,31 @@ $qLast = mysqli_query($conn,"
   $('#modalDetail').on('show.bs.modal', function (e) {
     var id = $(e.relatedTarget).data('id');
     $('#isiDetail').load('transaksi_detail.php?id=' + id);
+  });
+
+  $('.btn-edit').click(function() {
+    let id = $(this).data('id');
+    $('.view-jumlah-' + id).hide();
+    $('.edit-jumlah-' + id).show();
+    $(this).hide();
+    $('.btn-update[data-id="' + id + '"]').show();
+  });
+
+  $('.btn-update').click(function() {
+    let id = $(this).data('id');
+    let jumlah = $('.edit-jumlah-' + id + ' .jumlah-input').val();
+
+    if (jumlah === '') {
+      alert('Jumlah tidak boleh kosong');
+      return;
+    }
+
+    $.post('tambahan_pemakaian_at_update.php', {
+      id_tambahan: id,
+      jumlah: jumlah
+    }, function() {
+      location.reload();
+    });
   });
 </script>
 </body>

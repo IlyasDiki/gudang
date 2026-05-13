@@ -19,30 +19,147 @@ $tglAkhir = date('Y-m-t', strtotime($tglAwal));
    QUERY AT READY (SAMA EXCEL)
 ========================= */
 $sql = "
+
 SELECT 
-    d.id_supplier,
-    s.nama_supplier,
+    d.id_mutasi_detail,
+
+    MAX(d.id_supplier) as id_supplier,
+    MAX(s.nama_supplier) as nama_supplier,
     MAX(d.tanggal) as tanggal_terakhir,
-    MAX(md.jumlah) as stok_awal,
-    (MAX(md.jumlah) - SUM(d.sortir)) as sisa_at,
+
+    /* =========================
+       STOK AWAL
+    ========================= */
+    CASE
+
+        /* REPRO */
+        WHEN MAX(s.nama_supplier) = 'REPRO BRIKET'
+
+        THEN (
+
+            SELECT
+                ((bm.krg * 25) + bm.add_kg)
+
+            FROM bkbriket_mutasi bm
+
+            JOIN bkbriket b
+            ON b.id_bk = bm.id_bk
+
+            WHERE bm.id_mutasi = d.id_mutasi_detail
+            AND bm.jenis = 'REPRO'
+            AND b.status = 'KARANTINA'
+
+            LIMIT 1
+        )
+
+        /* SUPPLIER BIASA */
+        ELSE MAX(md.jumlah)
+
+    END as stok_awal,
+
+    /* TOTAL SORTIR */
+    IFNULL(SUM(d.sortir),0) as total_sortir,
+
+    /* =========================
+       SISA AT
+    ========================= */
+    CASE
+
+        /* REPRO */
+        WHEN MAX(s.nama_supplier) = 'REPRO BRIKET'
+
+        THEN
+        (
+            (
+                SELECT
+                    ((bm.krg * 25) + bm.add_kg)
+
+                FROM bkbriket_mutasi bm
+
+                JOIN bkbriket b
+                ON b.id_bk = bm.id_bk
+
+                WHERE bm.id_mutasi = d.id_mutasi_detail
+                AND bm.jenis = 'REPRO'
+                AND b.status = 'KARANTINA'
+
+                LIMIT 1
+            )
+
+            -
+
+            IFNULL(SUM(
+                d.sortir +
+                d.ma +
+                d.aa +
+                d.b_mentah +
+                d.air +
+                d.atp
+            ),0)
+        )
+
+        /* SUPPLIER */
+        ELSE
+        (
+            MAX(md.jumlah)
+
+            -
+
+            IFNULL(SUM(
+                d.sortir +
+                d.ma +
+                d.aa +
+                d.b_mentah +
+                d.air +
+                d.atp
+            ),0)
+        )
+
+    END as sisa_at,
+
+    /* TOTAL ATP */
+    IFNULL(SUM(d.atp),0) as total_atp,
+
+    /* TOTAL MIXER */
+    IFNULL((
+        SELECT SUM(pd.mixer)
+        FROM produksi_detail pd
+        WHERE pd.id_mutasi_detail = d.id_mutasi_detail
+    ),0) as total_mixer,
+
+    /* SISA PRODUKSI */
     (
-        SUM(d.atp)
-        - IFNULL((
+        IFNULL(SUM(d.atp),0)
+
+        -
+
+        IFNULL((
             SELECT SUM(pd.mixer)
             FROM produksi_detail pd
             WHERE pd.id_mutasi_detail = d.id_mutasi_detail
         ),0)
+
     ) as sisa_produksi
 
 FROM at_detail d
-JOIN mutasi_detail md ON md.id_detail = d.id_mutasi_detail
-LEFT JOIN supplier s ON s.id_supplier = d.id_supplier
+
+LEFT JOIN mutasi_detail md
+ON md.id_detail = d.id_mutasi_detail
+
+LEFT JOIN supplier s
+ON s.id_supplier = d.id_supplier
 
 WHERE d.tanggal <= '$tglAkhir'
 
 GROUP BY d.id_mutasi_detail
-HAVING sisa_at > 0 OR sisa_produksi > 0
+
+HAVING 
+    sisa_at > 0
+    OR
+    sisa_produksi > 0
+
 ORDER BY tanggal_terakhir DESC
+
 ";
 
 $result = $conn->query($sql);
@@ -93,7 +210,7 @@ $dataGroup = [];
 while($row = $result->fetch_assoc()){
     $supplier = $row['nama_supplier'] ?? '-';
     $dataGroup[$supplier][] = $row;
-    $total_stok += (int)$row['stok_awal'];
+    $total_stok += (int)$row['sisa_at'];
     $total_sisa += (int)$row['sisa_produksi'];
     $grandTotalSaldo += (int)$row['sisa_produksi'];
 }
@@ -129,8 +246,8 @@ th{ text-align:center; }
 <th>NO</th>
 <th>SUPPLIER</th>
 <th>TGL TERIMA</th>
-<th colspan="2">STOK</th>
-<th colspan="2">SISA</th>
+<th colspan="2">STOK (ASALAN)</th>
+<th colspan="2">SISA POWDER</th>
 <th>KET</th>
 </tr>
 
@@ -172,9 +289,6 @@ $html .= '
 <td></td>
 </tr>
 
-/* =========================
-   FISIK
-========================= */
 <tr class="header">
 <td colspan="8">STOK AT FISIK HABIS</td>
 </tr>
@@ -234,7 +348,7 @@ $html .= '
 <tr>
 <td>'.$noT++.'</td>
 <td colspan="4">'.$t['nama_barang'].'</td>
-<td>'.number_format($t['jumlah'],0).'</td>
+<td align="right">'.number_format($t['jumlah'],0).'</td>
 <td>Kg</td>
 <td>'.$t['keterangan'].'</td>
 </tr>';

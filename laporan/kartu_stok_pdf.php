@@ -425,7 +425,7 @@ LEFT JOIN (
   JOIN barang b ON b.id_barang = md.id_barang
   LEFT JOIN jenis_mutasi jm ON jm.id_jenis = m.id_jenis
 
-  WHERE b.nama_barang IN ('Powder','Repro Briket')
+  WHERE b.nama_barang = 'Powder'
 
   GROUP BY md.id_supplier
 ) sa ON sa.id_supplier = s.id_supplier
@@ -468,7 +468,7 @@ LEFT JOIN (
   LEFT JOIN jenis_mutasi jm ON jm.id_jenis = m.id_jenis
   WHERE m.arah = 'MASUK'
     AND (jm.tipe IS NULL OR jm.tipe != 'STOKAWAL')
-    AND b.nama_barang IN ('Powder','Repro Briket')
+    AND b.nama_barang = 'Powder'
     AND m.tanggal BETWEEN '$tglAwal' AND '$tglAkhir'
   GROUP BY md.id_supplier
 ) ms ON ms.id_supplier = s.id_supplier
@@ -484,7 +484,7 @@ LEFT JOIN (
   JOIN mutasi_detail md ON md.id_mutasi = m.id_mutasi
   JOIN barang b ON b.id_barang = md.id_barang
   WHERE m.arah = 'KELUAR'
-    AND b.nama_barang IN ('Powder','Repro Briket')
+    AND b.nama_barang = 'Powder'
     AND m.tanggal BETWEEN '$tglAwal' AND '$tglAkhir'
   GROUP BY md.id_supplier
 ) kl ON kl.id_supplier = s.id_supplier
@@ -513,57 +513,52 @@ LEFT JOIN (
   WHERE p.tanggal BETWEEN '$tglAwal' AND '$tglAkhir'
   GROUP BY p.id_supplier
 ) mx ON mx.id_supplier = s.id_supplier
-
+WHERE s.tipe = 'external'
 ORDER BY s.id_supplier
 ");
 
-$qRepro = mysqli_query($conn, "
-SELECT 
+$qReproBriket = mysqli_query($conn, "
+SELECT
+  COALESCE(ad.id_supplier, 0) AS id_supplier,
+  COALESCE(s.nama_supplier, 'REPRO BRIKET') AS nama_supplier,
+  COALESCE(s.alamat, '') AS alamat,
 
-CASE 
-  /* CEK ADA STOK AWAL BULAN INI */
-  WHEN SUM(
-    CASE 
-      WHEN m.jenis='AWAL'
-      AND DATE_FORMAT(m.tanggal,'%Y-%m') = '$tahun-$bulan'
-      THEN 1 ELSE 0
+  COALESCE(SUM(
+    CASE
+      WHEN bm.tanggal < '$tglAwal'
+      AND bm.jenis = 'REPRO'
+      THEN ((bm.krg * 25) + bm.add_kg)
+      ELSE 0
     END
-  ) > 0
+  ), 0) AS stok_awal,
 
-  THEN 
-    /* PAKAI STOK AWAL */
-    SUM(
-      CASE 
-        WHEN m.jenis='AWAL'
-        AND DATE_FORMAT(m.tanggal,'%Y-%m') = '$tahun-$bulan'
-        THEN md.jumlah
-        ELSE 0
-      END
-    )
+  COALESCE(SUM(
+    CASE
+      WHEN bm.tanggal BETWEEN '$tglAwal' AND '$tglAkhir'
+      AND bm.jenis = 'REPRO'
+      THEN ((bm.krg * 25) + bm.add_kg)
+      ELSE 0
+    END
+  ), 0) AS masuk,
 
-  ELSE 
-    /* PAKAI SALDO SEBELUM BULAN */
-    SUM(
-      CASE 
-        WHEN m.tanggal < '$tglAwal'
-        AND m.arah='MASUK'
-        THEN md.jumlah
+  COALESCE(SUM(
+    CASE
+      WHEN ad.tanggal BETWEEN '$tglAwal' AND '$tglAkhir'
+      THEN (ad.sortir + ad.ma + ad.aa + ad.b_mentah + ad.air + ad.atp)
+      ELSE 0
+    END
+  ), 0) AS keluar
 
-        WHEN m.tanggal < '$tglAwal'
-        AND m.arah='KELUAR'
-        THEN -md.jumlah
+FROM bkbriket_mutasi bm
+JOIN bkbriket b ON b.id_bk = bm.id_bk
+LEFT JOIN at_detail ad ON ad.id_mutasi_detail = bm.id_mutasi
+LEFT JOIN supplier s ON s.id_supplier = ad.id_supplier
 
-        ELSE 0
-      END
-    )
+WHERE bm.jenis = 'REPRO'
+AND b.status = 'KARANTINA'
 
-END AS stok_awal
-
-FROM mutasi m
-JOIN mutasi_detail md ON md.id_mutasi = m.id_mutasi
-JOIN barang b ON b.id_barang = md.id_barang
-
-WHERE b.nama_barang='Repro Briket'
+GROUP BY ad.id_supplier
+ORDER BY ad.id_supplier
 ");
 
 $wipData = [];
@@ -976,20 +971,20 @@ if($kelompokFix == 'Powder' && !$powderSudah):
 </tr>
 <?php } 
 
-    $reproData = mysqli_fetch_assoc($qRepro);
-    $stokAwalRepro = $reproData['stok_awal'] ?? 0;
-    $masukRepro    = $reproData['masuk'] ?? 0;
-    $keluarRepro   = $reproData['keluar'] ?? 0;
-    $akhirRepro    = $stokAwalRepro + $masukRepro - $keluarRepro;
+    while($reproData = mysqli_fetch_assoc($qReproBriket)){
+        $stokAwalRepro = $reproData['stok_awal'] ?? 0;
+        $masukRepro    = $reproData['masuk'] ?? 0;
+        $keluarRepro   = $reproData['keluar'] ?? 0;
+        $akhirRepro    = $stokAwalRepro + $masukRepro - $keluarRepro;
 
-    $totalAwal += $stokAwalRepro;
-    $totalMasuk += $masukRepro;
-    $totalKeluar += $keluarRepro;
-    $totalAkhir += $akhirRepro;
+        $totalAwal += $stokAwalRepro;
+        $totalMasuk += $masukRepro;
+        $totalKeluar += $keluarRepro;
+        $totalAkhir += $akhirRepro;
 ?>
 <tr class="isi-tabel">
 <td></td><td><?= $no++ ?>. </td>
-<td>Repro Briket</td>
+<td><?= $reproData['nama_supplier'] ?></td>
 <td align="right"><?= number_format($stokAwalRepro,2) ?></td>
 <td align="right"><?= number_format($masukRepro,0) ?></td>
 <td align="right"><?= number_format($keluarRepro,0) ?></td>
@@ -997,6 +992,7 @@ if($kelompokFix == 'Powder' && !$powderSudah):
 <td>Kg</td><td></td>
 </tr>
 <?php 
+    }
 ?>
 
 <tr style="background:#fff3cd;font-weight:bold" class="isi-tabel">

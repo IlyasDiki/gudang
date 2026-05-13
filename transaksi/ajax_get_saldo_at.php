@@ -75,8 +75,8 @@ if (!$isRepro) {
     while ($row = mysqli_fetch_assoc($q)) {
 
         $data[] = [
-            'id'       => 'supplier_'.$row['id_detail'],
-            'real_id'  => $row['id_detail'],
+            'id'       => (int) $row['id_detail'],
+            'real_id'  => (int) $row['id_detail'],
             'tipe'     => 'supplier',
             'saldo'    => $row['sisa'],
             'label'    => date('d M Y', strtotime($row['tanggal'])) . ' | SUPPLIER'

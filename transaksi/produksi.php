@@ -185,6 +185,7 @@ $qProduksi = mysqli_query($conn, "
             <div class="card-body table-responsive">
 
                 <form method="GET" class="mb-3">
+                    <input type="hidden" name="id_produksi" id="edit_id">
                     <div class="row">
                         <div class="col-md-3">
                             <label>Bulan</label>
@@ -228,6 +229,7 @@ $qProduksi = mysqli_query($conn, "
                             <th>Supplier</th>
                             <th class="text-right">Mixer</th>
                             <th>Keterangan</th>
+                            <th width="120">Aksi</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -235,8 +237,47 @@ $qProduksi = mysqli_query($conn, "
                         <tr>
                             <td><?= date('d-m-Y', strtotime($r['tanggal'])) ?></td>
                             <td><?= htmlspecialchars($r['nama_supplier'] ?? '-') ?></td>
-                            <td class="text-right"><?= number_format($r['mixer'],2) ?></td>
+                            <td>
+                                <div class="view-mixer-<?= $r['id_produksi'] ?> text-right">
+                                    <?= number_format($r['mixer'],2) ?>
+                                </div>
+
+                                <div class="edit-mixer-<?= $r['id_produksi'] ?>" style="display:none;">
+                                    <input type="number"
+                                        step="0.01"
+                                        class="form-control form-control-sm mixer-input"
+                                        value="<?= $r['mixer'] ?>">
+                                </div>
+                            </td>
+
                             <td><?= htmlspecialchars($r['keterangan'] ?? '') ?></td>
+                            <td>
+
+                            <!-- EDIT -->
+                            <button
+                                type="button"
+                                class="btn btn-warning btn-xs btn-edit"
+                                data-id="<?= $r['id_produksi'] ?>">
+                                <i class="fa fa-edit"></i> Edit
+                            </button>
+
+                            <!-- UPDATE -->
+                            <button
+                                type="button"
+                                class="btn btn-success btn-xs btn-update"
+                                data-id="<?= $r['id_produksi'] ?>"
+                                style="display:none;">
+                                <i class="fa fa-save"></i> Update
+                            </button>
+
+                            <!-- HAPUS -->
+                            <a href="produksi_hapus.php?id=<?= $r['id_produksi'] ?>"
+                            class="btn btn-danger btn-xs"
+                            onclick="return confirm('Hapus data?')">
+                            <i class="fa fa-trash"></i>
+                            </a>
+
+                        </td>
                         </tr>
                         <?php endwhile; ?>
                     </tbody>
@@ -305,6 +346,37 @@ $('#sumber_stok').change(function () {
     if (saldo > 0) {
         $('#formInput').show();
     }
+});
+
+$('.btn-edit').click(function(){
+
+    let id = $(this).data('id');
+
+    $('.view-mixer-'+id).hide();
+
+    $('.edit-mixer-'+id).show();
+
+    $(this).hide();
+
+    $('.btn-update[data-id="'+id+'"]').show();
+
+});
+
+$('.btn-update').click(function(){
+
+    let id = $(this).data('id');
+
+    let mixer = $('.edit-mixer-'+id+' .mixer-input').val();
+
+    $.post('produksi_update.php',{
+        id_produksi:id,
+        mixer:mixer
+    },function(res){
+
+        location.reload();
+
+    });
+
 });
 </script>
 

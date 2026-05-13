@@ -114,7 +114,7 @@ ORDER BY nama_kelompok
                         data-target="#modalDetail">
                   Detail
                 </button>
-                <a href="transaksi_hapus.php?id=<?= $row['id_transaksi'] ?>" class="btn btn-sm btn-danger" onclick="return confirm('Hapus data?')">Hapus</a>
+                <a href="transaksi_hapus.php?id=<?= $row['id_transaksi'] ?>" class="btn btn-sm btn-danger" onclick="return confirm('Hapus data?')"> <i class="fa fa-trash"></i></a>
               </td>
             </tr>
             <?php endwhile ?>

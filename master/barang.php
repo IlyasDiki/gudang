@@ -210,7 +210,7 @@ function getSortLink($column, $current_sort, $current_order) {
           </button>
           <a href="barang_hapus.php?id=<?= $b['id_barang'] ?>" 
             class="btn btn-danger btn-sm"
-            onclick="return confirm('Hapus barang?')">Hapus</a>
+            onclick="return confirm('Hapus barang?')"> <i class="fa fa-trash"></i></a>
         </td>
       </tr>
       <?php endwhile ?>

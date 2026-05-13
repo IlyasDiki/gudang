@@ -44,7 +44,7 @@
 <aside class="main-sidebar sidebar-dark-primary elevation-4">
 
   <a href="index.php" class="brand-link">
-    <img src="<?= BASE_URL ?>assets/logo.png" height="60"><strong>Gudang</strong>
+    <img src="<?= BASE_URL ?>assets/logo.png" height="60"><strong>Dian Shisha</strong>
   </a>
 
   <div class="sidebar">
